@@ -2,27 +2,32 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>deepMaze memory</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%234ea8ff'/%3E%3Cpath d='M3 3h2v2H3zm0 4h2v2H3zm4 0h2v2H7zm4 0h2v2h-2zm0-4h2v2h-2zM3 11h2v2H3zm4 0h2v2H7zm4 0h2v2h-2z' fill='%23000'/%3E%3C/svg%3E">
+  <title>deepMaze — the familiar's mind</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231c130c'/%3E%3Cpath d='M8 1l6 3.5v7L8 15l-6-3.5v-7z' fill='none' stroke='%23caa24a' stroke-width='1'/%3E%3Cpath d='M8 4l3 1.75v3.5L8 11 5 9.25v-3.5z' fill='%23caa24a'/%3E%3C/svg%3E">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/config.js"></script>
 </head>
 <body class="app">
-  <header class="topbar">
-    <h1>deepMaze</h1>
+  <header class="masthead">
+    <span class="crest" aria-hidden="true">&#9876;</span>
+    <div class="title-block">
+      <h1>deep<span>Maze</span></h1>
+      <p class="tagline">the familiar's mind &middot; what the hero remembers</p>
+    </div>
     <nav>
-      <a href="/">Train</a>
-      <a href="/runs">Runs</a>
-      <a href="/memory" class="active">Memory</a>
+      <a href="/">Quest</a>
+      <a href="/runs">Chronicles</a>
+      <a href="/memory" class="active">Familiar</a>
     </nav>
-    <span class="status" id="status">waiting for memory events…</span>
+    <span class="status" id="status">awaiting visions…</span>
   </header>
   <main class="memory-page">
-    <h2 id="title" style="margin-top:0; color: var(--fg);">Memory over time</h2>
+    <h2 id="title" style="margin-top:0; color: var(--oxblood);">The familiar's mind, over time</h2>
     <canvas id="memoryFull" width="960" height="320"></canvas>
     <div class="legend-row">
       Rows: timesteps (newest at bottom). Columns: hidden units (LSTM) or
-      past-step attention weights (DTQN). Blue = positive / high; red = negative.
+      past-step attention weights (DTQN). Gold = positive / high; oxblood = negative.
     </div>
   </main>
 

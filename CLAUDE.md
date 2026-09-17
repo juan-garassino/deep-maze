@@ -26,11 +26,12 @@ deepMaze/
 ├── utils/        manager.py + viz_events.py + visualizations.py + replay_buffer.py + episode_buffer.py + bundles.py
 ├── web/          FastAPI server + static/ + otel.py (Cloud Trace instrumentation)
 ├── notebooks/    train_agent.ipynb — dual-mode (Colab/local) DRQN/DTQN trainer + curriculum cell
-├── flows/        Prefect flows — retrain / promote / smoke-test
+├── flows/        Prefect flows — retrain / promote / smoke-test / train-ladder (ladder.py + train_ladder_flow.py)
 ├── runpod/       Dockerfile + entrypoint + program.md (autonomous Claude self-improve)
 ├── scripts/      train_runpod.py (standalone trainer) + train_gce.sh (spot-T4 GPU) + train_vertex.sh (Vertex, quota-blocked) + setup-gh-secrets.sh
-├── infra/        cloudrun/service.yaml · terraform/ (show-and-destroy IaC) · mlflow/ (REFERENCE only) · prefect/
-├── docker/       entrypoint.sh (dev) + entrypoint.prod.sh (GCS asset sync + gunicorn) + sync_assets.py (ASSETS_PREFIX-aware)
+├── infra/        cloudrun/service.yaml · terraform/ (show-and-destroy IaC; cloud_run.tf service + cloud_run_job.tf ephemeral trainer) · mlflow/ (REFERENCE only) · prefect/
+├── docker/       entrypoint.sh (dev) + entrypoint.prod.sh (GCS asset sync + gunicorn) + sync_assets.py (download) + upload_artifacts.py + entrypoint.train.sh (Cloud Run Job)
+├── Dockerfile.train  slim ephemeral training-job image (GPU/CPU-agnostic; no Node/Claude)
 └── main.py       CLI entrypoint
 ```
 
@@ -68,8 +69,8 @@ deepMaze/
 ```bash
 pip install -r requirements.txt
 
-# Q-learning, placeholder sprites
-python main.py --agent_type q --maze_width 8 --maze_height 8 \
+# Q-learning, placeholder sprites (grids snap to odd — see Known constraints)
+python main.py --agent_type q --maze_width 9 --maze_height 9 \
   --num_episodes 200 --seed 0
 
 # Multi-treasure DFS maze with lava
@@ -111,7 +112,7 @@ Make is the canonical entry point for everything that crosses the network. Commo
 ```bash
 # Local — nano smoke-test on CPU (~2 min)
 make test          # 100 pytest, ruff
-make local         # 8×8 maze, 200 episodes — verify pipeline, not convergence
+make local         # 9×9 maze, 200 episodes — verify pipeline, not convergence
 
 # RunPod — push image, create pod, watch
 make ghcr-login    # docker login ghcr.io (paste GitHub PAT with write:packages)
@@ -122,6 +123,11 @@ make runpod-list / runpod-get POD_ID=...     # status; logs via `runpodctl ssh c
 
 # GitHub repo configuration (idempotent — sets the deterministic constants)
 make gh-secrets    # CORS_ORIGINS + WIF_SERVICE_ACCOUNT prompted; others auto-set
+
+# Ephemeral Cloud Run training job — the convergence ladder (Prefect-driven)
+make push-train    # build Dockerfile.train → ghcr.io/juan-garassino/deepmaze-train-job:latest
+make cloudrun-smoke  # CPU NANO rung end-to-end (submit→result→promote→resync)
+make cloudrun-train  # climb the full ladder (needs cloud_run_job.tf applied + gcloud auth)
 
 # Cloud deploy via Terraform (show-and-destroy under €25/mo)
 cd infra/terraform && terraform init && \
@@ -158,10 +164,11 @@ suite trains only tiny tabular Q-agents on 5×5 mazes.
 
 | Where | Purpose | Entry point | Notes |
 |---|---|---|---|
-| **Local** | Pipeline smoke-test (~2 min CPU) | `notebooks/train_agent.ipynb` (`NANO_LOCAL=True`) or `make local` | Auto-shrinks config to 8×8 maze / 200 eps. Verifies pipeline, NOT convergence. |
+| **Local** | Pipeline smoke-test (~2 min CPU) | `notebooks/train_agent.ipynb` (`NANO_LOCAL=True`) or `make local` | Auto-shrinks config to 9×9 maze / 200 eps. Verifies pipeline, NOT convergence. |
 | **Colab** | Real training, interactive | same notebook from Colab UI | Mounts Drive, file:// MLflow on Drive, see `notebooks/README.md`. |
 | **RunPod** | Real training, scriptable, autonomous | `runpod/Dockerfile` + `scripts/train_runpod.py` | Pattern from `005-products/020-autoresearch`. `make build push run`. Optional `CLAUDE_SELF_IMPROVE=true` mode runs Claude Code with `--dangerously-skip-permissions` after training, given `runpod/program.md` as the autonomous loop spec. `make improve API_KEY=sk-...`. |
 | **GCE spot T4** | Real training on GCP, cheapest GPU path (~$0.15/hr, self-deleting VM) | `make gpu-smoke` / `make gpu-train` → `scripts/train_gce.sh` | DLVM image + repo clone at boot; artifacts rsync to `gs://garassino-ml-artifacts/deepmaze/gce/<tag>/` every 5 min (spot-safe). Needs `GPUS-ALL-REGIONS ≥ 1` quota. `scripts/train_vertex.sh` is the Vertex AI variant (blocked until Vertex T4 training quota > 0). |
+| **Cloud Run Job (ephemeral)** | Self-contained train→learn loop: a Prefect **convergence ladder** runs one ephemeral Cloud Run Job per rung (easiest config that provably learns → harden toward the partial-obs DRQN/DTQN memory thesis), warm-starting each rung from the last bundle, persisting MLflow + bundles to GCS, promoting the best learned rung to the serve prefix, refreshing the viewer. | `make cloudrun-train` / `make cloudrun-smoke` → `flows/train_ladder_flow.py` (+ `flows/ladder.py`); image `Dockerfile.train`; job `infra/terraform/cloud_run_job.tf` | **GPU/CPU-agnostic** — `train_gpu_count=0` runs on CPU TODAY (no quota); flip to `1` once the Cloud Run **L4 quota** lands. The job writes `OUTPUT_BASE/result.json` (the ladder's climb signal) + syncs to `gs://…/deepmaze-runs/cloudrun/<tag>/`. Cross-rung warm-start via `INIT_BUNDLE` (gs:// URI resolved by `entrypoint.train.sh`). |
 
 ## Docker
 
@@ -199,7 +206,7 @@ maze_rl_runs/run_YYYYMMDD_HHMMSS/
 
 ## Known constraints
 
-- `find_empty_cell` falls back to `start_pos` if the maze has no walkable cells (don't crank `--density` above 0.6).
+- **Maze grids are always odd.** A DFS perfect maze tiles its odd-coord lattice flush to the border only at odd dimensions; an even axis strands a 2-thick wall band on that side. Oddness is enforced by **snapping at the points of choice** (round down to odd, floor 5): the web UI (`snapOdd`/`snapDimFields` in `app.js`, odd presets), `scripts/train_runpod.py::_odd` (covers RunPod + the Cloud Run ladder via `CURRICULUM`), `flows/ladder.py` rungs, and `main.py::run`. `MazeEnvironment` itself stays **faithful to the dims it's given** (a tested contract — `tests/test_shaping_aux.py` etc. assert exact even-dim obs shapes; `/api/inference` + the painted-maze path rebuild recorded dims verbatim for model compatibility), and `_gen_dfs` carries a stub-fill backstop so any even dims that do appear (legacy bundles, hand-posted arrays) still avoid the double-wall band.
 - The web SSE handler subscribes a `queue.Queue`; when the queue saturates (>4096 events) the oldest is dropped to keep the live feed responsive. Saved artifacts are unaffected — they come from in-process subscribers.
 - Tabular Q-learning's policy heatmap uses each cell's observation as a key; unvisited cells show `NaN`. The `rollout.png` (behavioral viz) is the right answer for those agents.
 - Sprite sheet format: 16×16 source tiles; required sprite indices: `0=HOLE, 1=LAND, 2=LAVA, 3=EXIT, 4=AGENT`. Cell-value AGENT_BASE is 5 (agents are `5 + agent_index`).
@@ -211,6 +218,9 @@ maze_rl_runs/run_YYYYMMDD_HHMMSS/
 - `buffer_capacity` counts EPISODES for DRQN/DTQN (`utils/episode_buffer.py`, default 200 ≈ 120k transitions at 600 steps) but TRANSITIONS for DQN's `ReplayBuffer`.
 - DRQN burn-in starts from the R2D2-style **stored hidden state** recorded per transition (`EpisodeBuffer` `extra`/`init_extra`), not zeros. Curriculum stages scale the memory window via the optional 6th stage field `seq_len` (8/16/32; `burn_in` follows as `seq_len//2`; not shape-bearing, so weight transfer is unaffected).
 - Opt-in env features (off by default): `--reward_shaping` (potential-based, BFS distance to nearest remaining treasure — curriculum surfaces enable it; shapes only the training signal, not the observation), `--aux_features` (appends position + treasure direction/distance + remaining-fraction to the obs; **off everywhere by default — memory-first policy, keep it as an ablation knob only**; flat float32, rejected for tabular q), `--bump_penalty` (default −0.1; −0.01 on big mazes). `--max_steps` defaults to `3·(w+h)·n_treasures(collect_all)`. `--eval_every N` runs periodic greedy eval and drives `model.best.pt` selection.
+- `train_runpod.py` writes `OUTPUT_BASE/result.json` (`{run_tag, agents:{<a>:{eval_success_rate, best_success_rate, eval_revisit_rate, bundle_name, …}}}`) — the **machine-readable** climb signal the Prefect ladder reads from GCS (the metrics otherwise live only in the `train_session()` return dict + MLflow). `INIT_BUNDLE=<local model.{pt,pkl}>` warm-starts the FIRST stage of each agent (the ladder sets it per rung; `entrypoint.train.sh` resolves a `gs://` URI to a local path).
+- Backend asset sync is **boot-only**. A freshly promoted bundle is invisible to a *warm* instance until `POST /api/resync` (re-pulls `gs://…/deepmaze/` → local assets) or a cold start (scale-to-zero re-syncs at boot). The ladder calls `/api/resync` after promotion.
+- The ephemeral-trainer image is `deepmaze-train-job` (GHCR) — **distinct** from the RunPod `deepmaze-train` image to avoid a name collision. The Cloud Run **Job** (`infra/terraform/cloud_run_job.tf`) defaults to `train_gpu_count=0` (CPU, no quota); set `=1` for an L4 once the **Cloud Run L4 quota** is granted (separate from the GCE-T4 quota).
 
 ## MLOps surfaces
 
@@ -219,6 +229,7 @@ maze_rl_runs/run_YYYYMMDD_HHMMSS/
 | Colab notebook (A) | mounts Drive, clones repo, trains DRQN **and** DTQN in sequence, persists MLflow runs + `assets/<name>/` bundles to Drive (no GCP needed) | `notebooks/train_agent.ipynb` |
 | MLflow server (B) | experiment tracking + model registry — file:// stores everywhere (Drive on Colab, `/workspace/mlruns/` on RunPod, `./local_runs/mlruns/` locally). `infra/mlflow/` keeps the old Cloud Run + Cloud SQL recipe as reference but **is not used** under the post-2026-06-07 architecture (Cloud SQL is excluded; if revived, swap to Neon). | notebook + `scripts/train_runpod.py` |
 | RunPod training (D) | GPU container; standalone training via env vars; optional Claude self-improve loop | `runpod/Dockerfile` + `scripts/train_runpod.py` |
+| Cloud Run Job ladder (D′) | Ephemeral GPU(L4)/CPU job runs one rung per execution; a Prefect flow climbs the convergence ladder (warm-start between rungs), reads each rung's `result.json` from GCS to decide climb/repeat/stop, promotes the best learned rung to the serve prefix, calls `/api/resync`. file://→GCS persistence (no MLflow server). | `Dockerfile.train` + `docker/entrypoint.train.sh` + `docker/upload_artifacts.py` + `flows/{ladder,train_ladder_flow}.py` + `infra/terraform/cloud_run_job.tf` |
 | Cloud Run backend (C) | slim prod inference image; GCS asset hot-sync at startup. Image lives on **GHCR** (`ghcr.io/juan-garassino/deepmaze-backend`) per workspace policy — GAR is reserved for career-navigator. Cloud Run can't pull ghcr.io directly, so it pulls via the AR **remote repo** `ghcr-remote` (one-time setup, `infra/terraform/README.md`). First image push: `make push-backend` (NOT `make push`, which builds the RunPod training image). | `Dockerfile.prod` + `infra/cloudrun/service.yaml` |
 | GHA + Slack/Telegram (E) | OIDC (WIF via `garassino-op`) → GHCR build/push → Cloud Run deploy + Slack + Telegram notifications | `.github/workflows/deploy.yml` |
 | Prefect flows (D) | retrain (watch MLflow), promote (run_id → PR or GCS), daily smoke test | `flows/` |

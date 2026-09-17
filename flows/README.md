@@ -1,6 +1,6 @@
 # Prefect flows (D)
 
-Three flows that glue the MLOps loop together. Each is a plain Python entrypoint that also works without Prefect (just `python flows/<name>_flow.py`).
+Four flows that glue the MLOps loop together. Each is a plain Python entrypoint that also works without Prefect (just `python flows/<name>_flow.py`).
 
 ## One-time setup
 
@@ -25,6 +25,14 @@ Use Prefect Cloud (free tier) or a local server via `infra/prefect/docker-compos
 | `RETRAIN_POLL_SECONDS` | retrain | MLflow poll cadence (default 60s) |
 | `RETRAIN_MAX_WAIT_MIN` | retrain | wall-clock cap (default 180min) |
 | `RETRAIN_EVAL_METRIC` | retrain | which metric to compare champions on (default `eval_success_rate`) |
+| `GCP_PROJECT_ID` / `GCP_REGION` | train_ladder | project + region for `gcloud run jobs` (defaults `garassino-ml` / `europe-west1`) |
+| `TRAIN_JOB` | train_ladder | Cloud Run Job name to execute (default `deepmaze-train`) |
+| `ARTIFACTS_BUCKET` | train_ladder | bucket holding `result.json` + bundles (default `garassino-ml-artifacts`) |
+| `RUNS_PREFIX` / `SERVE_PREFIX` | train_ladder | runs workspace vs serve prefix (defaults `deepmaze-runs/cloudrun/` / `deepmaze/`) |
+| `CLOUD_RUN_URL` | train_ladder, smoke_test | backend URL — train_ladder POSTs `/api/resync` after promoting |
+| `STAGE_MAX_REPEATS` | train_ladder | per-rung retry cap (default 2) |
+| `LADDER_SMOKE` | train_ladder | set → run only the NANO rung on CPU |
+| `ASSETS_PREFIX` | promote (GCS mode) | serve prefix prepended to the bundle path (e.g. `deepmaze/`) |
 
 ## Flow reference
 
@@ -50,7 +58,7 @@ python flows/retrain_flow.py
 
 **What it does.** Given an MLflow run-id, downloads the `assets/<name>/` artifact, validates `config.json` against `REQUIRED_KEYS`, and either:
 - **PR mode (default):** copies the bundle into `<REPO_DIR>/assets/`, creates branch `promote/<name>`, pushes, opens a PR with `gh`.
-- **GCS mode:** `gsutil rsync` to `gs://${ASSETS_BUCKET}/<name>/`.
+- **GCS mode:** `gsutil rsync` to `gs://${ASSETS_BUCKET}/${ASSETS_PREFIX}<name>/` (the serve prefix — without it the bundle lands at the bucket root and `sync_assets` never sees it).
 
 **When to trigger.** Manually after any Colab run, or automatically by `retrain_flow`.
 
@@ -86,9 +94,30 @@ python flows/smoke_test_flow.py
 
 **Bootstrap:** fails on first-ever run because no model has been promoted yet. Run `promote_flow` at least once before enabling the schedule.
 
+### `train_ladder_flow`
+
+**What it does.** Climbs a **convergence ladder** (`flows/ladder.py`) on ephemeral Cloud Run Jobs. For each rung it points the job at the rung config (warm-started from the previous rung's best model via `INIT_BUNDLE`), runs it with `gcloud run jobs update … && gcloud run jobs execute … --wait`, reads the `result.json` the job synced to `gs://${ARTIFACTS_BUCKET}/${RUNS_PREFIX}<tag>/`, and consults `has_learned()` to climb / repeat (≤`STAGE_MAX_REPEATS`) / stop. The best learned rung is GCS→GCS copied into the serve prefix and `POST /api/resync` refreshes the viewer.
+
+Unlike `retrain`/`promote`, this flow needs **no queryable MLflow** — persistence is `file://`→GCS, so the learning signal is read straight from `result.json`.
+
+**When to trigger.** When you want a self-contained "train until it learns" loop. `make cloudrun-train` (full ladder) / `make cloudrun-smoke` (`LADDER_SMOKE=1`, NANO rung on CPU, exercises submit→result→promote→resync).
+
+**Inputs:** `run_tag_base: str = "ladder"`.
+
+**Side effects:** executes Cloud Run Jobs (cost), writes GCS (runs + serve prefixes), refreshes the live viewer.
+
+**Run locally:**
+```bash
+export GCP_PROJECT_ID=garassino-ml GCP_REGION=europe-west1 TRAIN_JOB=deepmaze-train
+export ARTIFACTS_BUCKET=garassino-ml-artifacts CLOUD_RUN_URL=https://deepmaze-backend-...run.app
+LADDER_SMOKE=1 python flows/train_ladder_flow.py     # CPU smoke first
+```
+
+**Prereqs:** `gcloud` authenticated with `run.developer` + `actAs` on the training SA; the job applied via `infra/terraform/cloud_run_job.tf`; `make push-train` done once (public GHCR package). The ladder rungs are starting points — tune them in `flows/ladder.py`.
+
 ## Deployment manifest
 
-See [`prefect.yaml`](prefect.yaml) — three deployments, only `smoke-test` is scheduled by default.
+See [`prefect.yaml`](prefect.yaml) — four deployments, only `smoke-test` is scheduled by default.
 
 ## How `flows/` resolves on a Prefect worker
 

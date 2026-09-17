@@ -13,24 +13,35 @@
 const API = (path) => (window.API_BASE_URL || "") + path;
 
 const HOLE = 0, LAND = 1, START = 2, EXIT = 3, LAVA = 4;
+// Dungeon map palette: hewn stone walls, torch-lit parchment floor.
 const COLORS = {
-  [HOLE]:  "#1a1a1a",
-  [LAND]:  "#cfd0d3",
-  [START]: "#b9d8bd",
-  [EXIT]:  "#cfd0d3",
-  [LAVA]:  "#cfd0d3",
+  [HOLE]:  "#101216",   // hewn dungeon stone (wall)
+  [LAND]:  "#3b424b",   // cold flagstone (floor)
+  [START]: "#4a4338",   // torch-warmed threshold
+  [EXIT]:  "#3b424b",
+  [LAVA]:  "#3b424b",
 };
 // Emoji sprites (style borrowed from awjuliani/web-rl-playground):
 // cells keep a flat base color and the emoji carries the meaning.
 const EMOJI = {
-  [START]: "\u{1F3E0}",   // 🏠
-  [EXIT]:  "\u{1F48E}",   // 💎
-  [LAVA]:  "\u{1F525}",   // 🔥
+  [START]: "\u{1F6AA}",   // 🚪 entrance
+  [EXIT]:  "\u{1F48E}",   // 💎 loot
+  [LAVA]:  "\u{1F525}",   // 🔥 fire trap
 };
-const AGENT_EMOJI = "\u{1F916}";  // 🤖
-const AGENT_COLOR = "#4ea8ff";
+const AGENT_EMOJI = "\u{1F9D9}";  // 🧙 the adventurer
+const AGENT_COLOR = "#caa24a";
 
 const $ = (id) => document.getElementById(id);
+
+// Maze grids are always odd: a DFS perfect maze tiles its odd-coord lattice
+// flush to the border only at odd sizes — even dims strand a 2-thick wall band.
+// We snap at every point a size is chosen so what you see is what gets built.
+const snapOdd = (v) => { v = Math.max(5, Math.floor(+v || 5)); return v % 2 ? v : v - 1; };
+function snapDimFields() {
+  $("w").value = snapOdd($("w").value);
+  $("h").value = snapOdd($("h").value);
+}
+
 const canvas = $("maze");
 const ctx = canvas.getContext("2d");
 const memCanvas = $("memory");
@@ -102,7 +113,7 @@ function fitCanvas() {
 function draw() {
   fitCanvas();
   const s = cellSize();
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#060708"; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   const sameDims = policyV && policyV.length === H && policyV[0].length === W;
   for (let i = 0; i < H; i++)
@@ -114,14 +125,15 @@ function draw() {
           && maze[i][j] !== HOLE) {
         const t = (policyV[i][j] - policyVmin)
                   / Math.max(policyVmax - policyVmin, 1e-6);
-        ctx.fillStyle = `rgba(${Math.round(220 * (1 - t))}, ${Math.round(200 * t)}, 60, 0.38)`;
+        // map's fortune: rust peril (low V) → torchlight promise (high V)
+        ctx.fillStyle = `rgba(${Math.round(160*(1-t)+224*t)}, ${Math.round(52*(1-t)+150*t)}, ${Math.round(40*(1-t)+70*t)}, 0.5)`;
         ctx.fillRect(j * s, i * s, s - 1, s - 1);
       }
     }
   // numbers when cells are big enough to stay legible
   if (overlayValues && sameDims && s >= 24) {
-    ctx.font = `${Math.max(8, Math.floor(s * 0.22))}px "IBM Plex Mono", monospace`;
-    ctx.fillStyle = "rgba(10, 14, 11, 0.78)";
+    ctx.font = `${Math.max(8, Math.floor(s * 0.22))}px "Space Mono", monospace`;
+    ctx.fillStyle = "rgba(232, 210, 170, 0.9)";  // torch-lit numerals on dark stone
     for (let i = 0; i < H; i++)
       for (let j = 0; j < W; j++)
         if (policyV[i][j] !== null && maze[i][j] !== HOLE)
@@ -136,12 +148,12 @@ function draw() {
   if (overlayVisits) {
     for (const [k, v] of visitTrail.entries()) {
       const [i, j] = k.split(",").map(Number);
-      ctx.fillStyle = `rgba(78, 168, 255, ${0.25 * v})`;
+      ctx.fillStyle = `rgba(200, 112, 44, ${0.28 * v})`;  // torch-lit footsteps
       ctx.fillRect(j * s, i * s, s, s);
     }
   }
   if (overlayArrows && policyArrows) {
-    ctx.strokeStyle = "#ffffffaa"; ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(199, 204, 212, 0.78)"; ctx.lineWidth = 1;
     for (let i = 0; i < H; i++)
       for (let j = 0; j < W; j++) {
         if (maze[i][j] === HOLE || maze[i][j] === LAVA) continue;
@@ -169,7 +181,7 @@ function drawArrow(cx, cy, action, len) {
   ctx.moveTo(x2, y2);
   ctx.lineTo(x2 - d[0]*ah + d[1]*ah*0.5, y2 - d[1]*ah - d[0]*ah*0.5);
   ctx.lineTo(x2 - d[0]*ah - d[1]*ah*0.5, y2 - d[1]*ah + d[0]*ah*0.5);
-  ctx.closePath(); ctx.fillStyle = "#ffffffaa"; ctx.fill();
+  ctx.closePath(); ctx.fillStyle = "rgba(199, 204, 212, 0.78)"; ctx.fill();
 }
 
 // --- paint editor (always operates on top of generator output) ----------
@@ -201,6 +213,7 @@ window.addEventListener("mouseup", () => { paintHeld = false; });
 
 // --- generator (single source of mazes) ---------------------------------
 async function generateMaze() {
+  snapDimFields();
   W = +$("w").value; H = +$("h").value;
   $("status").textContent = "generating…";
   try {
@@ -308,7 +321,7 @@ function resetCharts() {
 // --- memory strip -------------------------------------------------------
 function drawMemory(mem) {
   const w = memCanvas.width, h = memCanvas.height;
-  memCtx.fillStyle = "#1c232c"; memCtx.fillRect(0, 0, w, h);
+  memCtx.fillStyle = "#14171b"; memCtx.fillRect(0, 0, w, h);
   if (!mem) {
     $("memLabel").textContent = AGENTS_WITH_MEMORY.includes(currentAgentType)
       ? "memory: (waiting for first step)"
@@ -326,10 +339,10 @@ function drawMemory(mem) {
     const v = d[i] / mx;
     if (mem.kind === "attention_row") {
       const a = Math.max(0, Math.min(1, v));
-      memCtx.fillStyle = `rgba(78, 168, 255, ${a})`;
+      memCtx.fillStyle = `rgba(202, 162, 74, ${a})`;
     } else {
       const a = Math.min(1, Math.abs(v));
-      memCtx.fillStyle = v >= 0 ? `rgba(78, 168, 255, ${a})` : `rgba(226, 85, 85, ${a})`;
+      memCtx.fillStyle = v >= 0 ? `rgba(202, 162, 74, ${a})` : `rgba(150, 45, 40, ${a})`;
     }
     memCtx.fillRect(i * cw, 0, cw + 1, h);
   }
@@ -424,7 +437,7 @@ function startStream() {
     } else if (ev.type === "run" && ev.kind === "replay") {
       flushCharts();
       refreshPolicyGrid();
-      $("status").textContent = "🤖 trained — victory lap!";
+      $("status").textContent = "⚔ the hero has mastered the dungeon!";
     } else if (ev.type === "run" && ev.kind === "end") {
       flushCharts(); $("status").textContent = "done";
       $("train").style.display = ""; $("stop").style.display = "none";
@@ -454,10 +467,14 @@ $("ovValues").addEventListener("change", e => {
 
 // --- presets --------------------------------------------------------------
 const PRESETS = {
-  cozy:    { w: 12, h: 8,  episodes: 120, max_steps: 80,  n_treasures: 1 },
-  classic: { w: 22, h: 14, episodes: 300, max_steps: 200, n_treasures: 2 },
-  vast:    { w: 30, h: 20, episodes: 600, max_steps: 400, n_treasures: 3 },
+  cozy:    { w: 11, h: 7,  episodes: 120, max_steps: 80,  n_treasures: 1 },
+  classic: { w: 21, h: 13, episodes: 300, max_steps: 200, n_treasures: 2 },
+  vast:    { w: 29, h: 19, episodes: 600, max_steps: 400, n_treasures: 3 },
 };
+// Snap the size fields to odd whenever the adventurer edits them by hand.
+["w", "h"].forEach(id => $(id).addEventListener("change", () => {
+  $(id).value = snapOdd($(id).value);
+}));
 document.querySelectorAll(".preset").forEach(btn => {
   btn.addEventListener("click", async () => {
     const p = PRESETS[btn.dataset.preset];
@@ -473,6 +490,7 @@ document.querySelectorAll(".preset").forEach(btn => {
 
 // --- train --------------------------------------------------------------
 $("train").addEventListener("click", async () => {
+  snapDimFields();
   W = +$("w").value; H = +$("h").value;
   $("status").textContent = "starting…";
   currentAgentType = $("agent").value;

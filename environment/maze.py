@@ -171,6 +171,19 @@ class MazeEnvironment:
             m[r + dr // 2, c + dc // 2] = LAND  # knock wall between
             m[nr, nc] = LAND
             stack.append((nr, nc))
+        # The odd-coord lattice ends on a cell only for ODD dimensions. An even
+        # axis strands column w-2 / row h-2 as a full second wall line beside
+        # the border (the "thick edge"). Connect that strip into the maze as
+        # 1-wide dead-end stubs off the last cell line so two solid wall lines
+        # never sit together. Stubs are leaves → perfect-maze (acyclic) kept.
+        if w % 2 == 0 and w >= 4:
+            for r in range(1, h - 1, 2):
+                if m[r, w - 3] == LAND:
+                    m[r, w - 2] = LAND
+        if h % 2 == 0 and h >= 4:
+            for c in range(1, w - 1, 2):
+                if m[h - 3, c] == LAND:
+                    m[h - 2, c] = LAND
         # Goal may land on a wall for even-sized mazes; nudge it inward
         gr, gc = self.treasure_positions[0]
         if m[gr, gc] == HOLE:

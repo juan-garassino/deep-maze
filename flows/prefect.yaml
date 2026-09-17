@@ -18,6 +18,13 @@ deployments:
     schedules: []           # triggered with a run_id parameter
     parameters: {}
 
+  - name: train-ladder
+    entrypoint: flows/train_ladder_flow.py:train_ladder_flow
+    work_pool:
+      name: default-process
+    schedules: []           # triggered manually; climbs the Cloud Run Job ladder
+    parameters: {}
+
   - name: smoke-test
     entrypoint: flows/smoke_test_flow.py:smoke_test_flow
     work_pool:

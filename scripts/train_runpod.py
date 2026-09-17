@@ -16,7 +16,8 @@ Env vars (all optional — defaults shown):
     RUN_TAG=v1
     SEED=0
     # Curriculum: semicolon-separated "W,H,n_treasures,episodes,max_steps[,seq_len]"
-    CURRICULUM=10,20,2,800,180,8;20,40,4,1500,720,16;30,60,6,2500,1620,32
+    # W,H are snapped to odd (DFS mazes tile cleanly only on odd grids).
+    CURRICULUM=9,19,2,800,180,8;19,39,4,1500,720,16;29,59,6,2500,1620,32
     # Single-stage override (skips curriculum):
     MAZE_WIDTH= MAZE_HEIGHT= N_TREASURES= NUM_EPISODES= MAX_STEPS=
     PARTIAL=5 N_LAVA=2 COLLECT_ALL=true DENSITY=0.2
@@ -31,10 +32,18 @@ Env vars (all optional — defaults shown):
     # promotion on periodic-eval success rate (0 disables the gate).
     EXPLORATION_DECAY=0 BUFFER_CAPACITY=0   # 0 = repo default; decay is
                                             # per-EPISODE, capacity in EPISODES
+    INIT_BUNDLE=            # local model.{pt,pkl} to warm-start the first stage
+                           # from (the Cloud Run ladder sets this per rung; the
+                           # entrypoint resolves a gs:// URI to a local path)
+
+Outputs OUTPUT_BASE/result.json — a machine-readable {run_tag, agents:{<a>:
+{eval_success_rate, best_success_rate, eval_revisit_rate, bundle_name, ...}}}
+summary the Prefect ladder reads to decide climb/repeat/stop.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -61,6 +70,14 @@ def _env(name: str, default, cast=str):
     return cast(raw)
 
 
+def _odd(n: int) -> int:
+    """Maze grids are always odd — a DFS perfect maze only tiles its odd-coord
+    lattice flush to the border at odd sizes (even sizes strand a 2-thick wall
+    band). Snap here so every programmatic training size is odd too."""
+    n = int(n)
+    return n if n % 2 else max(5, n - 1)
+
+
 OUTPUT_BASE   = Path(_env("OUTPUT_BASE", "/tmp/deepmaze_runpod"))
 MLRUNS_DIR    = OUTPUT_BASE / "mlruns"
 ASSETS_DIR    = OUTPUT_BASE / "assets"
@@ -70,13 +87,18 @@ AGENTS_TO_RUN     = _env("AGENTS_TO_RUN", "drqn,dtqn")
 RUN_TAG           = _env("RUN_TAG", "v1")
 MLFLOW_EXPERIMENT = _env("MLFLOW_EXPERIMENT", "deepmaze")
 SEED              = _env("SEED", 0, int)
+# Cross-run warm-start: a local model.{pt,pkl} the FIRST stage of every agent
+# starts from (the curriculum already threads weights between later stages).
+# The Cloud Run ladder sets this per rung; the entrypoint resolves a gs:// URI
+# to a local path before invoking. None = train from scratch.
+INIT_BUNDLE       = _env("INIT_BUNDLE", None)
 
 # Curriculum or single-stage. If MAZE_WIDTH is set, single-stage wins.
 SINGLE_W = _env("MAZE_WIDTH", 0, int)
 if SINGLE_W:
     STAGES = [(
-        SINGLE_W,
-        _env("MAZE_HEIGHT", 60, int),
+        _odd(SINGLE_W),
+        _odd(_env("MAZE_HEIGHT", 59, int)),
         _env("N_TREASURES", 10, int),
         _env("NUM_EPISODES", 3000, int),
         _env("MAX_STEPS", 600, int),
@@ -90,13 +112,13 @@ else:
     # Collect-all tours: max_steps = 3*(w+h)*n_treasures, treasure counts
     # ramp 2/4/6 so the keep-going-after-pickup behavior is learned early.
     raw = _env("CURRICULUM",
-               "10,20,2,800,180,8;20,40,4,1500,720,16;30,60,6,2500,1620,32")
+               "9,19,2,800,180,8;19,39,4,1500,720,16;29,59,6,2500,1620,32")
     STAGES = []
     for stage in raw.split(";"):
         parts = [int(x.strip()) for x in stage.split(",")]
         w, h, nt, ne, mx = parts[:5]
         sq = parts[5] if len(parts) > 5 else 0
-        STAGES.append((w, h, nt, ne, mx, sq))
+        STAGES.append((_odd(w), _odd(h), nt, ne, mx, sq))
 
 GENERATOR        = _env("GENERATOR", "dfs,random")  # comma list = sampled per maze build
 DENSITY          = _env("DENSITY", 0.2, float)
@@ -147,6 +169,31 @@ SHOWCASE_FRAMES = _env("SHOWCASE_FRAMES", 300, int)
 
 def _hr(c: str = "─", w: int = 78) -> str:
     return c * w
+
+
+def _summarize(all_results: dict, run_tag: str) -> dict:
+    """Machine-readable run summary for an out-of-process orchestrator.
+
+    The learning signals otherwise live only in the train_session() return dict
+    + MLflow metrics; the Prefect ladder runs in a SEPARATE process (the Cloud
+    Run Job is opaque to it), so it reads this from the synced GCS artifacts to
+    decide climb/repeat/stop. One entry per agent, from its last trained stage.
+    """
+    summary: dict = {"run_tag": run_tag, "agents": {}}
+    for agent_type, stages in all_results.items():
+        if not stages:
+            continue
+        r = stages[-1]
+        summary["agents"][agent_type] = {
+            "eval_success_rate": r["eval_success_rate"],
+            "best_success_rate": r["best_success_rate"],
+            "eval_revisit_rate": r["eval_revisit_rate"],
+            "out_dir": r["out_dir"],
+            "bundle_name": r["run_name"],
+            "model_path": r["model_path"],
+            "best_model_path": r["best_model_path"],
+        }
+    return summary
 
 
 def _agent_overrides(agent_type: str) -> dict:
@@ -216,7 +263,7 @@ def main():
 
     all_results = {}
     for agent_type in agents:
-        warm = None
+        warm = INIT_BUNDLE
         stage_results = []
         for i, (w, h, nt, ne, mx, sq) in enumerate(STAGES):
             res = None
@@ -241,6 +288,9 @@ def main():
             warm = res["best_model_path"] or res["model_path"]
         all_results[agent_type] = stage_results
 
+    summary = _summarize(all_results, RUN_TAG)
+    (OUTPUT_BASE / "result.json").write_text(json.dumps(summary, indent=2))
+
     print()
     print(_hr("="))
     print("  SUMMARY")
@@ -248,6 +298,7 @@ def main():
     for agent_type, stages in all_results.items():
         for r in stages:
             print(f"  {r['agent_type']:5s}  {r['run_name']:40s}  succ={r['eval_success_rate']:.2%}")
+    print(f"  result.json → {OUTPUT_BASE / 'result.json'}")
 
 
 if __name__ == "__main__":

@@ -48,10 +48,13 @@ def validate_bundle(bundle: Path) -> None:
 def push_to_gcs(bundle: Path, bucket: str) -> str:
     log = get_run_logger()
     name = bundle.name
-    subprocess.check_call(["gsutil", "-m", "rsync", "-r",
-                           str(bundle), f"gs://{bucket}/{name}/"])
-    log.info(f"pushed to gs://{bucket}/{name}/")
-    return f"gs://{bucket}/{name}/"
+    # The backend serves models under the per-project ASSETS_PREFIX (deepmaze/);
+    # without it the bundle lands at the bucket root and sync_assets never sees it.
+    prefix = os.environ.get("ASSETS_PREFIX", "")
+    dst = f"gs://{bucket}/{prefix}{name}/"
+    subprocess.check_call(["gsutil", "-m", "rsync", "-r", str(bundle), dst])
+    log.info(f"pushed to {dst}")
+    return dst
 
 
 @task

@@ -65,11 +65,14 @@ def _render_detail(name: str, results: dict, artifacts: list[str]) -> str:
     safe_name = html.escape(name)
     safe_url_name = quote(name, safe="")
     parts = ["<html><head><meta charset='utf-8'>",
+             "<link href='https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap' rel='stylesheet'>",
              "<link rel='stylesheet' href='/static/styles.css'>",
              f"<title>{safe_name}</title></head><body class='app'>",
-             "<header class='topbar'><h1>deepMaze</h1>",
-             "<nav><a href='/'>Train</a><a href='/runs' class='active'>Runs</a>",
-             "<a href='/memory'>Memory</a></nav></header>",
+             "<header class='masthead'><span class='crest'>&#9876;</span>",
+             "<div class='title-block'><h1>deep<span>Maze</span></h1>",
+             "<p class='tagline'>a hero's tale</p></div>",
+             "<nav><a href='/'>Quest</a><a href='/runs' class='active'>Chronicles</a>",
+             "<a href='/memory'>Familiar</a></nav></header>",
              "<main class='detail'>",
              f"<h2 class='detail-full'>{safe_name}</h2>"]
     if results:
@@ -364,6 +367,27 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
                     "model_file": os.path.basename(model_path),
                 })
         return {"models": items}
+
+    @app.post("/api/resync")
+    def resync_assets():
+        """Re-pull bundles from GCS into the local assets dir so a freshly
+        promoted model is visible WITHOUT a restart. The prod entrypoint syncs
+        only at boot; the ladder flow calls this after promoting. Cold starts
+        (scale-to-zero) already re-sync at boot, so this only matters for a warm
+        instance. No-op without ASSETS_BUCKET."""
+        if not os.environ.get("ASSETS_BUCKET"):
+            return {"synced": 0, "skipped": "ASSETS_BUCKET unset"}
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "deepmaze_sync_assets", os.path.join(_ROOT, "docker", "sync_assets.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        dst = os.environ.get("ASSETS_DIR") or os.path.join(os.getcwd(), "assets")
+        try:
+            n = mod.sync(dst)
+        except Exception as e:  # surface any sync failure to the caller
+            raise HTTPException(500, f"resync failed: {e}") from e
+        return {"synced": n, "assets_dir": dst}
 
     @app.post("/api/inference")
     async def inference(req: Request):

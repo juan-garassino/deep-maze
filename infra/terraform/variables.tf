@@ -40,6 +40,31 @@ variable "service_name" {
   default     = "deepmaze-backend"
 }
 
+// ── Ephemeral training job ────────────────────────────────────────────────
+variable "train_job_name" {
+  description = "Cloud Run Job name for the ephemeral trainer (the Prefect ladder executes it)."
+  type        = string
+  default     = "deepmaze-train"
+}
+
+variable "train_image_name" {
+  description = "GHCR repository name for the training-job image. Distinct from the RunPod `deepmaze-train` image to avoid a GHCR name collision."
+  type        = string
+  default     = "deepmaze-train-job"
+}
+
+variable "train_gpu_count" {
+  description = "L4 GPUs per task. 0 = CPU job that runs TODAY (no quota); set to 1 once the Cloud Run L4 quota lands, for speed on the larger rungs."
+  type        = number
+  default     = 0
+}
+
+variable "train_timeout" {
+  description = "Per-execution timeout. One rung must finish inside this (the ladder runs one execution per rung)."
+  type        = string
+  default     = "21600s"
+}
+
 variable "assets_bucket" {
   description = "Shared GCS bucket name for the deep-* family. Imported, not created."
   type        = string

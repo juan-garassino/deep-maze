@@ -16,21 +16,21 @@ import sys
 from pathlib import Path
 
 
-def main() -> int:
+def sync(dst_root=None) -> int:
+    """Pull gs://${ASSETS_BUCKET}/${ASSETS_PREFIX}* into dst_root (prefix
+    stripped). Returns the file count. Raises ImportError if the GCS SDK is
+    absent so callers can decide whether that's fatal. No-op (returns 0) when
+    ASSETS_BUCKET is unset. Importable so the viewer can re-sync at runtime
+    (`POST /api/resync`) — the prod entrypoint syncs only once at boot."""
     bucket_name = os.environ.get("ASSETS_BUCKET")
     if not bucket_name:
         return 0
     prefix = os.environ.get("ASSETS_PREFIX", "")
-    try:
-        from google.cloud import storage
-    except ImportError:
-        print("[sync_assets] google-cloud-storage not installed; skip", file=sys.stderr)
-        return 0
+    from google.cloud import storage
 
-    dst_root = Path(os.environ.get("ASSETS_DIR", "/app/assets"))
+    dst_root = Path(dst_root or os.environ.get("ASSETS_DIR", "/app/assets"))
     dst_root.mkdir(parents=True, exist_ok=True)
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
+    bucket = storage.Client().bucket(bucket_name)
     n = 0
     for blob in bucket.list_blobs(prefix=prefix or None):
         if blob.name.endswith("/"):
@@ -42,6 +42,20 @@ def main() -> int:
         dst.parent.mkdir(parents=True, exist_ok=True)
         blob.download_to_filename(str(dst))
         n += 1
+    return n
+
+
+def main() -> int:
+    bucket_name = os.environ.get("ASSETS_BUCKET")
+    if not bucket_name:
+        return 0
+    try:
+        n = sync()
+    except ImportError:
+        print("[sync_assets] google-cloud-storage not installed; skip", file=sys.stderr)
+        return 0
+    prefix = os.environ.get("ASSETS_PREFIX", "")
+    dst_root = os.environ.get("ASSETS_DIR", "/app/assets")
     print(f"[sync_assets] {n} files from gs://{bucket_name}/{prefix} → {dst_root}")
     return 0
 

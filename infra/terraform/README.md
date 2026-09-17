@@ -5,11 +5,12 @@ Minimal Terraform for the deepMaze inference backend on `garassino-ml` / `europe
 | File | Resources |
 |---|---|
 | `main.tf` | Provider + GCS backend at `gs://garassino-op-tf-state/deepmaze/` |
-| `variables.tf` | project_id, region, image_tag, ghcr_owner, ghcr_remote_repo, image_name, service_name, assets_bucket, assets_prefix, cors_origins, wif_pool_id, github_repo |
+| `variables.tf` | project_id, region, image_tag, ghcr_owner, ghcr_remote_repo, image_name, service_name, assets_bucket, assets_prefix, cors_origins, wif_pool_id, github_repo, **train_job_name, train_image_name, train_gpu_count, train_timeout** |
 | `storage.tf` | Shared `garassino-ml-artifacts` bucket — **imported, not created**, `prevent_destroy=true` |
 | `iam.tf` | Backend SA + bucket reader (prefix-scoped, incl. list via objectListPrefix) + Trace agent + run.admin/actAs for the CI deploy + WIF impersonation binding |
 | `cloud_run.tf` | Cloud Run v2 service (image via AR remote repo proxying GHCR) + public invoker IAM |
-| `outputs.tf` | `cloud_run_url`, `sa_email`, `bucket_name`, `assets_prefix` |
+| `cloud_run_job.tf` | Ephemeral training **Job** + training SA (objectAdmin scoped to the `deepmaze` stem — runs + serve prefixes) + AR reader + WIF impersonation. **GPU gated on `train_gpu_count`** (0 = CPU today; 1 = L4 once quota lands). Per-run env + image are `ignore_changes` (the Prefect ladder owns env, `make push-train` owns the image). |
+| `outputs.tf` | `cloud_run_url`, `sa_email`, `bucket_name`, `assets_prefix`, `train_job_name`, `train_sa_email` |
 
 ## One-time setup
 
@@ -36,6 +37,25 @@ Minimal Terraform for the deepMaze inference backend on `garassino-ml` / `europe
      --location=europe-west1 --project=garassino-ml
    ```
    The GHCR package must be **public** (no upstream credentials configured).
+   The same `ghcr-remote` repo serves **both** images: `deepmaze-backend`
+   (inference service) and `deepmaze-train-job` (ephemeral training job).
+
+## Ephemeral training job (Cloud Run Job)
+
+`cloud_run_job.tf` adds the `deepmaze-train` Job the Prefect ladder executes.
+Defaults to **CPU** (`train_gpu_count=0`) so it runs with no quota; the maze nets
+are tiny, so rungs 0–2 converge on CPU. For an **L4**, request the Cloud Run L4
+quota (separate from the GCE-T4 quota), then `terraform apply -var train_gpu_count=1`.
+
+```bash
+make push-train     # build Dockerfile.train → ghcr.io/juan-garassino/deepmaze-train-job:latest
+                    # (flip the GHCR package PUBLIC on first push)
+terraform apply -var train_gpu_count=0 \
+  -var "wif_pool_id=projects/634336216563/locations/global/workloadIdentityPools/gh-actions"
+```
+
+The operator/CI that runs the ladder needs `roles/run.developer` + `actAs` on the
+`train_sa_email` output to execute the job. Smoke it on CPU with `make cloudrun-smoke`.
 
 ## Show
 

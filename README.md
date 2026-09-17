@@ -86,7 +86,8 @@ the dev loop.
 | Architecture (one-page wiring + data flow) | [`docs/architecture.md`](docs/architecture.md) |
 | Cold-start deployment runbook | [`docs/deployment-guide.md`](docs/deployment-guide.md) |
 | Colab training notebook | [`notebooks/`](notebooks/) — see [`notebooks/README.md`](notebooks/README.md) |
-| Prefect flows (retrain · promote · smoke-test) | [`flows/`](flows/) — see [`flows/README.md`](flows/README.md) |
+| Ephemeral Cloud Run training (convergence ladder) | `make cloudrun-smoke` / `make cloudrun-train` → [`flows/train_ladder_flow.py`](flows/train_ladder_flow.py) — see [`flows/README.md`](flows/README.md) |
+| Prefect flows (retrain · promote · smoke-test · train-ladder) | [`flows/`](flows/) — see [`flows/README.md`](flows/README.md) |
 | Infra provisioning (MLflow · Cloud Run · Prefect) | [`infra/`](infra/) — see [`infra/README.md`](infra/README.md) |
 | CI/CD with Slack | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) |
 | Observability (MLflow · Cloud Monitoring · Cloud Trace) | [`docs/observability.md`](docs/observability.md) |

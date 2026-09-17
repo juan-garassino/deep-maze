@@ -35,8 +35,9 @@ def build_argparser() -> argparse.ArgumentParser:
                    choices=["q", "dqn", "ppo", "drqn", "dtqn"], default="q")
     p.add_argument("--net", choices=["mlp", "cnn"], default=None,
                    help="Network backbone for DQN/PPO; overrides hyperparam default.")
-    p.add_argument("--maze_width", type=int, default=10)
-    p.add_argument("--maze_height", type=int, default=10)
+    p.add_argument("--maze_width", type=int, default=9,
+                   help="Snapped to odd — DFS mazes tile cleanly only on odd grids.")
+    p.add_argument("--maze_height", type=int, default=9)
     p.add_argument("--n_agents", type=int, default=1)
     p.add_argument("--density", type=float, default=0.2)
     p.add_argument("--generator", type=str, default="random",
@@ -120,6 +121,10 @@ def _load_sprites(args) -> list:
 
 def run(args):
     seed_everything(args.seed)
+    # Maze grids are always odd: a DFS perfect maze tiles its odd-coord lattice
+    # flush to the border only at odd sizes (even sizes strand a 2-thick wall).
+    args.maze_width = args.maze_width if args.maze_width % 2 else max(5, args.maze_width - 1)
+    args.maze_height = args.maze_height if args.maze_height % 2 else max(5, args.maze_height - 1)
     mgr = MazeManager(run_id=args.run_name or args.run_id)
     mgr.save_config(vars(args))
 

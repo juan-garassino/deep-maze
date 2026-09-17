@@ -1,0 +1,37 @@
+# Slim, purpose-built image for the EPHEMERAL Cloud Run training job.
+#
+# Same CUDA/torch base as runpod/Dockerfile (L4-compatible, and torch auto-uses
+# CPU when no GPU is present — so this one image runs both the CPU bridge and the
+# L4 job unchanged) but WITHOUT the Node/Claude self-improve layer (an ephemeral
+# job never self-improves) and WITH google-cloud-storage so it syncs artifacts to
+# GCS itself (no gsutil/gcloud CLI in the image).
+FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+        "mlflow==2.18.*" "google-cloud-storage>=2.16"
+
+COPY agents/      ./agents/
+COPY environment/ ./environment/
+COPY training/    ./training/
+COPY utils/       ./utils/
+COPY config/      ./config/
+COPY scripts/train_runpod.py     ./scripts/
+COPY docker/upload_artifacts.py  ./docker/
+COPY docker/entrypoint.train.sh  ./docker/
+
+RUN chmod +x ./docker/entrypoint.train.sh
+
+ENV OUTPUT_BASE=/tmp/dm
+
+ENTRYPOINT ["./docker/entrypoint.train.sh"]

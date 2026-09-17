@@ -53,7 +53,7 @@ test:
 local:
 	OUTPUT_BASE=$(PWD)/local_runs \
 	AGENTS_TO_RUN=drqn \
-	CURRICULUM="8,8,1,120,60" \
+	CURRICULUM="9,9,1,120,60" \
 	PARTIAL=2 \
 	NANO=true \
 	SHOWCASE_EVERY=60 \
@@ -108,6 +108,27 @@ push-backend:
 	@echo "First push? Flip the package to PUBLIC (Cloud Run pulls it via the"
 	@echo "AR remote repo without upstream credentials):"
 	@echo "  https://github.com/users/$(GH_USERNAME)/packages/container/deepmaze-backend/settings"
+
+# Ephemeral Cloud Run training-job image (Dockerfile.train → deepmaze-train-job).
+# Slim + GPU/CPU-agnostic; pulled by the Cloud Run Job via the ghcr-remote AR repo.
+.PHONY: push-train
+push-train:
+	docker build -f Dockerfile.train -t deepmaze-train-job .
+	docker tag deepmaze-train-job $(REGISTRY)/deepmaze-train-job:latest
+	docker push $(REGISTRY)/deepmaze-train-job:latest
+	@echo ""
+	@echo "=== Pushed $(REGISTRY)/deepmaze-train-job:latest ==="
+	@echo "First push? Flip the package PUBLIC so Cloud Run pulls it via ghcr-remote:"
+	@echo "  https://github.com/users/$(GH_USERNAME)/packages/container/deepmaze-train-job/settings"
+
+# Climb the convergence ladder on ephemeral Cloud Run Jobs (Prefect-driven).
+# Needs gcloud auth + the cloud_run_job.tf job applied first. cloudrun-smoke
+# runs only the NANO rung on CPU — exercises submit→result→promote→resync.
+.PHONY: cloudrun-train cloudrun-smoke
+cloudrun-train:
+	python flows/train_ladder_flow.py
+cloudrun-smoke:
+	LADDER_SMOKE=1 python flows/train_ladder_flow.py
 
 # ---------------------------------------------------------------------------
 # Docker — run locally

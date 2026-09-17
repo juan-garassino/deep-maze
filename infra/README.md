@@ -6,6 +6,7 @@ Infrastructure-as-code for the MLOps subsystems. Each subdir is self-contained �
 |---|---|---|---|
 | [`mlflow/`](mlflow/) | B — MLflow server | Cloud Run + Cloud SQL + GCS artifact store | [`mlflow/README.md`](mlflow/README.md) |
 | [`cloudrun/`](cloudrun/) | C — inference service | `service.yaml` rendered by GHA and applied via `gcloud run services replace` | inline header comment |
+| [`terraform/`](terraform/) | C + D′ — service + training Job | Cloud Run inference service (`cloud_run.tf`) **and** the ephemeral GPU/CPU training Job (`cloud_run_job.tf`) the Prefect ladder executes | [`terraform/README.md`](terraform/README.md) |
 | [`prefect/`](prefect/) | D — local Prefect server | Optional Docker compose for running Prefect without Prefect Cloud | inline header comment |
 
 ## What's NOT here

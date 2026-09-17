@@ -33,6 +33,20 @@ def test_dfs_has_walls():
     assert 0.2 < wall_frac < 0.7, f"DFS wall fraction looked odd: {wall_frac}"
 
 
+@pytest.mark.parametrize("w,h", [(22, 14), (8, 8), (10, 6), (16, 16), (11, 11)])
+def test_dfs_no_double_wall_band(w, h):
+    """Even dimensions must not strand a 2-thick wall line beside the border:
+    no two horizontally- or vertically-adjacent lines may both be all-wall."""
+    for seed in range(8):
+        m = MazeEnvironment(w, h, seed=seed, generator="dfs").maze
+        col_wall = (m == HOLE).all(axis=0)   # whole column is wall
+        row_wall = (m == HOLE).all(axis=1)   # whole row is wall
+        assert not (col_wall[:-1] & col_wall[1:]).any(), \
+            f"adjacent all-wall columns at w={w} h={h} seed={seed}"
+        assert not (row_wall[:-1] & row_wall[1:]).any(), \
+            f"adjacent all-wall rows at w={w} h={h} seed={seed}"
+
+
 def test_open_has_no_interior_walls():
     env = MazeEnvironment(8, 8, generator="open")
     interior = env.maze[1:-1, 1:-1]

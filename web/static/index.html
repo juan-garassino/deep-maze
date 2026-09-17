@@ -2,164 +2,172 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>deepMaze — training lab</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2341e88d'/%3E%3Cpath d='M3 3h2v2H3zm0 4h2v2H3zm4 0h2v2H7zm4 0h2v2h-2zm0-4h2v2h-2zM3 11h2v2H3zm4 0h2v2H7zm4 0h2v2h-2z' fill='%23000'/%3E%3C/svg%3E">
+  <title>deepMaze — the dungeon codex</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231c130c'/%3E%3Cpath d='M8 1l6 3.5v7L8 15l-6-3.5v-7z' fill='none' stroke='%23caa24a' stroke-width='1'/%3E%3Cpath d='M8 4l3 1.75v3.5L8 11 5 9.25v-3.5z' fill='%23caa24a'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="/static/config.js"></script>
 </head>
 <body class="app">
-  <header class="topbar">
-    <h1>deep<span>Maze</span></h1>
+  <header class="masthead">
+    <span class="crest" aria-hidden="true">&#9876;</span>
+    <div class="title-block">
+      <h1>deep<span>Maze</span></h1>
+      <p class="tagline">descend &middot; map the vault &middot; train the hero</p>
+    </div>
     <nav>
-      <a href="/" class="active">Train</a>
-      <a href="/runs">Runs</a>
-      <a href="/memory">Memory</a>
+      <a href="/" class="active">Quest</a>
+      <a href="/runs">Chronicles</a>
+      <a href="/memory">Familiar</a>
     </nav>
-    <span class="status" id="status">idle</span>
+    <span class="status" id="status">at rest</span>
   </header>
 
   <main class="three-pane">
-    <!-- left: maze board + memory strip -->
+    <!-- left: the dungeon map + the familiar's memory -->
     <section class="pane board">
+      <div class="scroll-title"><span>&#10070;</span> The Dungeon <span>&#10070;</span></div>
       <div class="board-canvas" id="boardWrap">
         <canvas id="maze" width="560" height="560"></canvas>
       </div>
 
       <div class="memory-strip">
-        <div class="memory-label" id="memLabel">memory: —</div>
+        <div class="memory-label" id="memLabel">the familiar's mind: &mdash;</div>
         <canvas id="memory" width="480" height="44"></canvas>
-        <a href="/memory" class="memory-detail">full memory →</a>
+        <a href="/memory" class="memory-detail">scry deeper &rarr;</a>
       </div>
 
       <div class="scrubber">
-        <button id="playBtn" title="play / pause">▶</button>
-        <button id="stepBtn" title="step one frame">⏭</button>
+        <button id="playBtn" title="play / pause">&#9654;</button>
+        <button id="stepBtn" title="step one frame">&#9197;</button>
         <input id="scrub" type="range" min="0" max="0" value="0" />
         <span id="frameLabel">0 / 0</span>
       </div>
 
       <div class="legend">
-        <span class="dot wall"></span>wall
-        <span>🏠 start</span>
-        <span>💎 treasure</span>
-        <span>🔥 lava</span>
-        <span>🤖 agent</span>
+        <span class="dot wall"></span>stone
+        <span>&#128682; entrance</span>
+        <span>&#128142; loot</span>
+        <span>&#128293; fire trap</span>
+        <span>&#129497; adventurer</span>
       </div>
     </section>
 
-    <!-- center: mission console -->
+    <!-- center: the dungeon master's screen -->
     <section class="pane controls-pane">
       <div class="mode-toggle" role="tablist">
-        <label class="mode-tab"><input type="radio" name="mode" value="train" checked><span>⚡ Train new</span></label>
-        <label class="mode-tab"><input type="radio" name="mode" value="inference"><span>▶ Watch trained</span></label>
+        <label class="mode-tab"><input type="radio" name="mode" value="train" checked><span>&#9876; Forge a Hero</span></label>
+        <label class="mode-tab"><input type="radio" name="mode" value="inference"><span>&#9670; Summon Champion</span></label>
       </div>
 
       <div id="trainPanel">
         <fieldset class="console-group">
-          <legend>presets</legend>
+          <legend>campaigns</legend>
           <div class="preset-row">
-            <button class="preset" data-preset="cozy">cozy<small>12×8 · 120 ep</small></button>
-            <button class="preset active" data-preset="classic">classic<small>22×14 · 300 ep</small></button>
-            <button class="preset" data-preset="vast">vast<small>30×20 · 600 ep</small></button>
+            <button class="preset" data-preset="cozy">Crypt<small>11&times;7 &middot; 120 ep</small></button>
+            <button class="preset active" data-preset="classic">Labyrinth<small>21&times;13 &middot; 300 ep</small></button>
+            <button class="preset" data-preset="vast">Abyss<small>29&times;19 &middot; 600 ep</small></button>
           </div>
         </fieldset>
 
         <fieldset class="console-group">
-          <legend>world</legend>
+          <legend>the dungeon</legend>
           <div class="config-grid">
-            <label>generator
+            <label>layout
               <select id="generator">
-                <option value="dfs" selected>dfs corridors</option>
-                <option value="random">random walls</option>
-                <option value="open">open field</option>
+                <option value="dfs" selected>winding crypt</option>
+                <option value="random">crumbled ruin</option>
+                <option value="open">open hall</option>
               </select>
             </label>
             <label>size
               <span class="pair">
-                <input id="w" type="number" value="22" min="5" max="40">
-                <span class="x">×</span>
-                <input id="h" type="number" value="14" min="5" max="40">
+                <input id="w" type="number" value="21" min="5" max="39" step="2">
+                <span class="x">&times;</span>
+                <input id="h" type="number" value="13" min="5" max="39" step="2">
               </span>
             </label>
-            <label>density<input id="density" type="number" value="0.2" step="0.05" min="0" max="0.9"></label>
-            <label>💎 treasures<input id="n_treasures" type="number" value="2" min="1" max="10"></label>
-            <label>🔥 lava<input id="n_lava" type="number" value="0" min="0"></label>
-            <label class="check-line"><input type="checkbox" id="collectAll"> collect all 💎</label>
+            <label>rubble<input id="density" type="number" value="0.2" step="0.05" min="0" max="0.9"></label>
+            <label>&#128142; loot<input id="n_treasures" type="number" value="2" min="1" max="10"></label>
+            <label>&#128293; fire traps<input id="n_lava" type="number" value="0" min="0"></label>
+            <label class="check-line"><input type="checkbox" id="collectAll"> claim all &#128142;</label>
           </div>
           <div class="toolbar">
-            <span class="tb-label">paint:</span>
+            <span class="tb-label">carve:</span>
             <button data-paint="1" class="paint-btn active" title="floor">floor</button>
-            <button data-paint="0" class="paint-btn" title="wall">wall</button>
-            <button data-paint="2" class="paint-btn" title="start">🏠</button>
-            <button data-paint="3" class="paint-btn" title="goal">💎</button>
-            <button data-paint="4" class="paint-btn" title="lava">🔥</button>
+            <button data-paint="0" class="paint-btn" title="stone">stone</button>
+            <button data-paint="2" class="paint-btn" title="entrance">&#128682;</button>
+            <button data-paint="3" class="paint-btn" title="loot">&#128142;</button>
+            <button data-paint="4" class="paint-btn" title="fire trap">&#128293;</button>
             <span class="tb-sep"></span>
-            <button id="regen">regenerate</button>
-            <button id="resetEdits">reset</button>
+            <button id="regen">conjure anew</button>
+            <button id="resetEdits">undo</button>
           </div>
         </fieldset>
 
         <fieldset class="console-group">
-          <legend>agent</legend>
+          <legend>the hero</legend>
           <div class="config-grid">
-            <label>algorithm
+            <label>discipline
               <select id="agent">
-                <option value="q">q — tabular</option>
-                <option value="dqn" selected>dqn — neural</option>
-                <option value="ppo">ppo — policy grad</option>
-                <option value="drqn">drqn — memory (lstm)</option>
-                <option value="dtqn">dtqn — memory (attn)</option>
+                <option value="q">q &middot; scrollkeeper</option>
+                <option value="dqn" selected>dqn &middot; battlemage</option>
+                <option value="ppo">ppo &middot; warlord</option>
+                <option value="drqn">drqn &middot; seer (lstm)</option>
+                <option value="dtqn">dtqn &middot; oracle (attn)</option>
               </select>
             </label>
-            <label>partial view K<input id="partial" type="number" value="" min="0" max="5" placeholder="full"></label>
-            <label class="check-line"><input type="checkbox" id="shaping" checked> reward shaping <em>(guides early search)</em></label>
+            <label>sight radius K<input id="partial" type="number" value="" min="0" max="5" placeholder="all‑seeing"></label>
+            <label class="check-line"><input type="checkbox" id="shaping" checked> guiding omens <em>(eases the early search)</em></label>
           </div>
         </fieldset>
 
         <fieldset class="console-group">
-          <legend>budget</legend>
+          <legend>the trials</legend>
           <div class="config-grid">
-            <label>episodes<input id="episodes" type="number" value="300" min="1"></label>
-            <label>max steps<input id="max_steps" type="number" value="150" min="10"></label>
+            <label>quests<input id="episodes" type="number" value="300" min="1"></label>
+            <label>steps each<input id="max_steps" type="number" value="150" min="10"></label>
           </div>
         </fieldset>
 
-        <button id="train" class="primary launch">⚡ TRAIN<small>watch it learn live — then it plays</small></button>
-        <button id="stop" class="stop-btn" style="display:none">■ STOP</button>
+        <button id="train" class="primary launch">&#9876; BEGIN THE DESCENT<small>watch the hero learn the dungeon &mdash; then it delves</small></button>
+        <button id="stop" class="stop-btn" style="display:none">&#10006; HALT</button>
       </div>
 
       <div class="config-grid" id="inferencePanel" style="display:none">
-        <label style="grid-column: span 2;">model
+        <label style="grid-column: span 2;">champion
           <select id="model"></select>
         </label>
-        <label style="grid-column: span 2;">maze source
+        <label style="grid-column: span 2;">proving ground
           <select id="mazeSource">
-            <option value="trained">same as trained</option>
-            <option value="fresh">fresh — same params</option>
-            <option value="custom">custom (edit board)</option>
+            <option value="trained">the dungeon it learned</option>
+            <option value="fresh">fresh dungeon, same lore</option>
+            <option value="custom">a dungeon you carve</option>
           </select>
         </label>
-        <label>episodes<input id="infEpisodes" type="number" value="1" min="1" max="20"></label>
-        <button id="watch" class="primary">▶ Watch</button>
+        <label>delves<input id="infEpisodes" type="number" value="1" min="1" max="20"></label>
+        <button id="watch" class="primary">&#9670; Summon</button>
       </div>
 
       <div class="overlay-toggles">
-        <label><input type="checkbox" id="ovValues" checked>value gradient + numbers</label>
-        <label><input type="checkbox" id="ovArrows">policy arrows</label>
-        <label><input type="checkbox" id="ovVisits">visitation trail</label>
+        <label><input type="checkbox" id="ovValues" checked>map's fortune</label>
+        <label><input type="checkbox" id="ovArrows">hero's instinct</label>
+        <label><input type="checkbox" id="ovVisits">footsteps</label>
       </div>
     </section>
 
-    <!-- right: live telemetry -->
+    <!-- right: the adventure log -->
     <section class="pane charts">
-      <div class="chart-cell"><canvas id="rewardChart"></canvas></div>
-      <div class="chart-cell"><canvas id="lengthChart"></canvas></div>
-      <div class="chart-cell"><canvas id="lossChart"></canvas></div>
-      <div class="chart-cell"><canvas id="epsChart"></canvas></div>
+      <div class="chronicle-head"><span>&#10070;</span> Adventure Log <span>&#10070;</span></div>
+      <div class="chart-grid">
+        <div class="chart-cell"><canvas id="rewardChart"></canvas></div>
+        <div class="chart-cell"><canvas id="lengthChart"></canvas></div>
+        <div class="chart-cell"><canvas id="lossChart"></canvas></div>
+        <div class="chart-cell"><canvas id="epsChart"></canvas></div>
+      </div>
     </section>
   </main>
 
