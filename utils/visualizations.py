@@ -35,6 +35,7 @@ def _ema(xs: Sequence[float], alpha: float = 0.1) -> list[float]:
 
 
 def plot_training_curves(episodes: list[Any], out_path: str) -> str:
+    """Plot episode reward, length and loss (with epsilon where available) from a list of EpisodeEvents to `out_path`; returns the path."""
     plt = _plt()
     if not episodes:
         fig, ax = plt.subplots(figsize=(6, 3))
@@ -86,21 +87,23 @@ def plot_training_curves(episodes: list[Any], out_path: str) -> str:
 
 
 def plot_policy_heatmap(q_source, env, out_path: str) -> str:
-    plt = _plt()
-    """
+    """Save a V(s) heatmap with greedy-action arrows to `out_path`; returns the path.
+
     q_source can be:
       - a dict mapping flattened-state tuples -> action ndarray (tabular)
+      - an object with ``q_values_batch(states)`` (any net agent)
       - a callable: state_array -> q_values ndarray (DQN/PPO)
     For non-tabular agents we evaluate q_source on the observation produced by
-    placing a single agent at each empty cell.
+    placing a single agent at each empty cell. Cells with no data stay NaN.
     """
+    plt = _plt()
     h, w = env.height, env.width
     V = np.full((h, w), np.nan)
     A = np.full((h, w), -1, dtype=int)
 
     if isinstance(q_source, dict) and q_source:
         # Tabular: pick a representative entry per cell by scanning the dict
-        # for the agent-position cell value (4) over the maze grid.
+        # for the agent-position cell value (AGENT_BASE = 5) over the maze grid.
         for i in range(h):
             for j in range(w):
                 if env.maze[i, j] == 0:
@@ -172,6 +175,7 @@ def plot_policy_heatmap(q_source, env, out_path: str) -> str:
 
 
 def plot_visitation(trajectories: list[list[tuple[int, int]]], env, out_path: str) -> str:
+    """Plot log(1 + visits) per cell from `trajectories` (lists of (row, col)) to `out_path`; returns the path."""
     plt = _plt()
     h, w = env.height, env.width
     counts = np.zeros((h, w))
@@ -272,6 +276,7 @@ def plot_behavioral_rollout(agent, env, out_path: str,
 
 
 def plot_reward_landscape(env, out_path: str) -> str:
+    """Plot the maze layout (walls, treasures, start) to `out_path`; returns the path."""
     plt = _plt()
     h, w = env.height, env.width
     img = np.full((h, w, 3), 200, dtype=np.uint8)

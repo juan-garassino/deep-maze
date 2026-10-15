@@ -18,6 +18,7 @@ import numpy as np
 
 @dataclass
 class StepEvent:
+    """One environment step. `state` is the observation grid (or the full maze during playback)."""
     episode: int
     step: int
     state: np.ndarray
@@ -33,6 +34,7 @@ class StepEvent:
         return self.to_json_full()
 
     def to_json_full(self) -> dict:
+        """JSON-serialisable dict including the full `state` grid."""
         return {
             "type": "step",
             "episode": self.episode,
@@ -47,6 +49,7 @@ class StepEvent:
         }
 
     def to_json_delta(self) -> dict:
+        """JSON-serialisable dict without `state`, for live SSE where the client already holds the maze."""
         return {
             "type": "step_delta",
             "episode": self.episode,
@@ -62,6 +65,7 @@ class StepEvent:
 
 @dataclass
 class EpisodeEvent:
+    """Summary of one finished training episode."""
     episode: int
     total_reward: float
     length: int
@@ -70,6 +74,7 @@ class EpisodeEvent:
     success: bool = False
 
     def to_json(self) -> dict:
+        """JSON-serialisable dict with ``type='episode'``."""
         return {"type": "episode", **asdict(self)}
 
 
@@ -83,25 +88,30 @@ class EvalEvent:
     revisit_rate: float = 0.0  # memory metric: steps on already-visited cells
 
     def to_json(self) -> dict:
+        """JSON-serialisable dict with ``type='eval'``."""
         return {"type": "eval", **asdict(self)}
 
 
 @dataclass
 class PolicyEvent:
+    """Periodic policy snapshot (`snapshot` is the agent's `policy_snapshot()`); not serialised over SSE."""
     episode: int
     snapshot: Any = field(repr=False)
 
     def to_json(self) -> dict:
         # snapshot is intentionally not serialized over SSE (too large).
+        """JSON-serialisable dict with the episode only."""
         return {"type": "policy", "episode": self.episode}
 
 
 @dataclass
 class RunEvent:
+    """Start or end marker for a run (`kind` is ``'start'`` or ``'end'``)."""
     kind: str          # 'start' | 'end'
     info: dict = field(default_factory=dict)
 
     def to_json(self) -> dict:
+        """JSON-serialisable dict with ``type='run'``."""
         return {"type": "run", "kind": self.kind, "info": self.info}
 
 
@@ -122,27 +132,32 @@ class EventBus:
         self._lock = threading.Lock()
 
     def subscribe(self, fn: Callable[[VizEvent], None]) -> Callable[[], None]:
+        """Register `fn` to be called with every event; returns a function that unsubscribes it."""
         with self._lock:
             self._handlers.append(fn)
         return lambda: self._handlers.remove(fn) if fn in self._handlers else None
 
     def subscribe_queue(self, maxsize: int = 1024) -> queue.Queue:
+        """Register and return a bounded `queue.Queue` that receives every event."""
         q: queue.Queue = queue.Queue(maxsize=maxsize)
         with self._lock:
             self._queues.append(q)
         return q
 
     def unsubscribe_queue(self, q: queue.Queue) -> None:
+        """Remove a queue returned by `subscribe_queue`."""
         with self._lock:
             if q in self._queues:
                 self._queues.remove(q)
 
     def clear(self) -> None:
+        """Remove all handlers and queues."""
         with self._lock:
             self._handlers.clear()
             self._queues.clear()
 
     def publish(self, event: VizEvent) -> None:
+        """Deliver `event` to every handler (exceptions are swallowed) and queue (the oldest entry is dropped when full)."""
         with self._lock:
             handlers = list(self._handlers)
             queues = list(self._queues)

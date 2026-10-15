@@ -24,6 +24,11 @@ NO_ACTION = -1
 
 
 class EpisodeBuffer:
+    """Ring buffer of whole episodes (capacity counts episodes).
+
+    Steps are added with `add_step`, committed on `done` or by `end_episode`, and
+    drawn as fixed-length sequences by `sample`.
+    """
     def __init__(self, capacity: int):
         self.capacity = capacity
         self.episodes: deque = deque(maxlen=capacity)
@@ -61,6 +66,11 @@ class EpisodeBuffer:
         return len(self.episodes)
 
     def sample(self, batch_size: int, seq_len: int) -> dict[str, np.ndarray]:
+        """Draw up to `batch_size` episodes and return one `seq_len` window from each.
+
+        Shorter episodes are padded at the tail with their last step; the returned mask
+        marks real steps with 1.0 and padding with 0.0. Returns a dict of numpy arrays.
+        """
         eps = random.sample(self.episodes, min(batch_size, len(self.episodes)))
         seqs, masks, init_extras = [], [], []
         for ep in eps:

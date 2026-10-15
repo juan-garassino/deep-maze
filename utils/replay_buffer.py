@@ -1,3 +1,5 @@
+"""Uniform transition replay buffer for DQN."""
+
 import random
 from collections import deque
 
@@ -5,6 +7,10 @@ import numpy as np
 
 
 class ReplayBuffer:
+    """Fixed-capacity FIFO buffer of (state, action, reward, next_state, done) transitions.
+
+    Capacity counts transitions. States are stored flattened as float32.
+    """
     def __init__(self, capacity, state_size, action_dim=1):
         self.capacity = capacity
         self.state_size = state_size
@@ -12,6 +18,7 @@ class ReplayBuffer:
         self.buffer = deque(maxlen=capacity)
 
     def push(self, state, action, reward, next_state, done):
+        """Store one transition; the oldest is evicted once `capacity` is reached."""
         self.buffer.append((
             np.asarray(state, dtype=np.float32).flatten(),
             int(action),
@@ -21,6 +28,11 @@ class ReplayBuffer:
         ))
 
     def sample(self, batch_size):
+        """Sample `batch_size` transitions uniformly without replacement.
+
+        Returns a dict of numpy arrays: ``state``/``next_state`` float32 (B, state_size),
+        ``action`` int64 (B, 1), ``reward`` and ``done`` float32 (B, 1).
+        """
         batch = random.sample(self.buffer, batch_size)
         s, a, r, ns, d = zip(*batch)
         return {
