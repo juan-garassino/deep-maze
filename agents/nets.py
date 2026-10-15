@@ -31,6 +31,7 @@ def encode_grid_batch(states: np.ndarray, h: int, w: int) -> torch.Tensor:
 
 
 class MLPHead(nn.Module):
+    """MLP Q-network: input_size -> 64 -> 64 -> output_size (ReLU)."""
     def __init__(self, input_size: int, output_size: int):
         super().__init__()
         self.net = nn.Sequential(
@@ -40,6 +41,7 @@ class MLPHead(nn.Module):
         )
 
     def forward(self, x):
+        """x: (N, input_size) float. Returns (N, output_size)."""
         return self.net(x)
 
 
@@ -62,7 +64,7 @@ class CNNHead(nn.Module):
         self.head = nn.Linear(32 + aux_dim, output_size)
 
     def forward(self, x):
-        # x: flattened ints of shape (N, h*w [+ aux]) or a 4-D float tensor.
+        """x: (N, h*w [+ aux]) integer labels (aux columns are floats) or (N, VOCAB, h, w) float. Returns Q-values (N, output_size)."""
         aux = None
         if x.dim() == 2:
             if self.aux_dim:
@@ -92,6 +94,7 @@ class CNNActorCritic(nn.Module):
         self.critic = nn.Linear(32 + aux_dim, 1)
 
     def forward(self, x):
+        """Same input as `CNNHead.forward`. Returns (logits (N, action_size), value (N, 1))."""
         aux = None
         if x.dim() == 2:
             if self.aux_dim:
@@ -105,6 +108,7 @@ class CNNActorCritic(nn.Module):
 
 
 class MLPActorCritic(nn.Module):
+    """MLP actor-critic with a shared 64-64 Tanh trunk; forward returns (logits (N, action_size), value (N, 1))."""
     def __init__(self, input_size: int, action_size: int):
         super().__init__()
         self.shared = nn.Sequential(
@@ -115,5 +119,6 @@ class MLPActorCritic(nn.Module):
         self.critic = nn.Linear(64, 1)
 
     def forward(self, x):
+        """x: (N, input_size) float. Returns (logits (N, action_size), value (N, 1))."""
         h = self.shared(x)
         return self.actor(h), self.critic(h)  # raw logits

@@ -12,6 +12,8 @@ from dataclasses import asdict, dataclass
 
 @dataclass(frozen=True)
 class QHP:
+    """Defaults for `QAgent`."""
+
     learning_rate: float = 0.1
     discount_factor: float = 0.95
     exploration_rate: float = 1.0
@@ -21,6 +23,8 @@ class QHP:
 
 @dataclass(frozen=True)
 class DQNHP:
+    """Defaults for `DQNAgent`."""
+
     learning_rate: float = 1e-3
     discount_factor: float = 0.99
     exploration_rate: float = 1.0
@@ -34,6 +38,8 @@ class DQNHP:
 
 @dataclass(frozen=True)
 class PPOHP:
+    """Defaults for `PPOAgent`."""
+
     learning_rate: float = 3e-4
     discount_factor: float = 0.99
     clip_eps: float = 0.2
@@ -48,6 +54,8 @@ class PPOHP:
 
 @dataclass(frozen=True)
 class DRQNHP:
+    """Defaults for `DRQNAgent`."""
+
     learning_rate: float = 1e-3
     discount_factor: float = 0.99
     exploration_rate: float = 1.0
@@ -66,6 +74,8 @@ class DRQNHP:
 
 @dataclass(frozen=True)
 class DTQNHP:
+    """Defaults for `DTQNAgent`."""
+
     learning_rate: float = 3e-4
     discount_factor: float = 0.99
     exploration_rate: float = 1.0
@@ -88,4 +98,5 @@ DEFAULTS = {"q": QHP(), "dqn": DQNHP(), "ppo": PPOHP(),
 
 
 def defaults_for(agent_type: str) -> dict:
+    """Return the default hyperparameters for `agent_type` (a key of ``DEFAULTS``) as a plain dict."""
     return asdict(DEFAULTS[agent_type])

@@ -1,3 +1,5 @@
+"""PPO agent (clipped objective, GAE, fixed-horizon rollouts)."""
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -53,6 +55,7 @@ class PPOAgent(BaseAgent):
         return np.asarray(state, dtype=np.float32).flatten()
 
     def move(self, state):
+        """Sample an action from the policy (argmax while ``deterministic``) and remember its log-probability for the next `update`."""
         s = torch.from_numpy(self._flat(state)).unsqueeze(0).to(self.device)
         with torch.no_grad():
             logits, _ = self.ac(s)
@@ -66,6 +69,7 @@ class PPOAgent(BaseAgent):
         return int(a.item())
 
     def update(self, state, action, reward, next_state, done, truncated=False):
+        """Append the transition to the rollout buffer; run a PPO update once `n_steps` transitions are stored."""
         self._buf.append((
             self._flat(state), int(action), float(reward),
             self._flat(next_state), float(done), float(truncated),
@@ -75,6 +79,7 @@ class PPOAgent(BaseAgent):
             self._learn()
 
     def flush(self):
+        """Run a PPO update on any buffered transitions (call at the end of training)."""
         if self._buf:
             self._learn()
 
@@ -151,12 +156,14 @@ class PPOAgent(BaseAgent):
 
     # ------------------------------------------------------------------
     def q_values(self, state):
+        """Action probabilities for `state` (softmax of the logits), shape (action_size,). Used as a stand-in for Q-values in the visualisations."""
         s = torch.from_numpy(self._flat(state)).unsqueeze(0).to(self.device)
         with torch.no_grad():
             logits, _ = self.ac(s)
         return torch.softmax(logits, dim=-1).cpu().numpy().flatten()
 
     def q_values_batch(self, states):
+        """Action probabilities for a sequence of states, shape (N, action_size)."""
         flat = np.stack([self._flat(s) for s in states])
         x = torch.from_numpy(flat).to(self.device)
         with torch.no_grad():
@@ -164,4 +171,5 @@ class PPOAgent(BaseAgent):
         return torch.softmax(logits, dim=-1).cpu().numpy()
 
     def policy_snapshot(self):
+        """CPU copy of the actor-critic state_dict."""
         return {k: v.detach().cpu().clone() for k, v in self.ac.state_dict().items()}

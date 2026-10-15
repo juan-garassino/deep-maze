@@ -1,3 +1,5 @@
+"""Double DQN agent with a replay buffer and periodically synced target network."""
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,6 +10,23 @@ from replay_buffer import ReplayBuffer
 
 
 class DQNAgent(BaseAgent):
+    """Double DQN over flattened observations.
+
+    Parameters
+    ----------
+    state_size : int
+        Length of the flattened observation.
+    action_size : int
+        Number of discrete actions.
+    net : str
+        ``"mlp"`` or ``"cnn"`` (the latter needs `grid_shape`).
+    grid_shape : tuple of int, optional
+        (h, w) of the observation grid, required for the CNN path.
+    aux_dim : int
+        Number of extra float features appended to the grid in the observation.
+
+    Other arguments are the hyperparameters listed in ``config.hyperparameters.DQNHP``.
+    """
     def __init__(self, state_size, action_size, learning_rate=1e-3,
                  discount_factor=0.99, exploration_rate=1.0,
                  exploration_decay=0.995, min_epsilon=0.01,
@@ -49,6 +68,7 @@ class DQNAgent(BaseAgent):
                                 ).unsqueeze(0).to(self.device)
 
     def move(self, state):
+        """Epsilon-greedy action for `state`."""
         if np.random.random() < self.epsilon:
             return np.random.randint(0, self.action_size)
         with torch.no_grad():
@@ -56,6 +76,7 @@ class DQNAgent(BaseAgent):
         return int(q.argmax(dim=1).item())
 
     def update(self, state, action, reward, next_state, done, truncated=False):
+        """Store the transition and, once the buffer holds a batch, take one gradient step."""
         self.memory.push(state, action, reward, next_state, done)
         self._step += 1
         if len(self.memory) >= self.batch_size:
@@ -84,14 +105,17 @@ class DQNAgent(BaseAgent):
                 self.target_model.load_state_dict(self.model.state_dict())
 
     def q_values(self, state):
+        """Q-values for one `state`, float32 array of shape (action_size,)."""
         with torch.no_grad():
             return self.model(self._to_tensor(state)).cpu().numpy().flatten()
 
     def q_values_batch(self, states):
+        """Q-values for a sequence of states; returns float32 array of shape (N, action_size)."""
         flat = np.stack([np.asarray(s, dtype=np.float32).flatten() for s in states])
         x = torch.from_numpy(flat).to(self.device)
         with torch.no_grad():
             return self.model(x).cpu().numpy()
 
     def policy_snapshot(self):
+        """CPU copy of the online network's state_dict."""
         return {k: v.detach().cpu().clone() for k, v in self.model.state_dict().items()}

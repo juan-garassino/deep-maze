@@ -23,6 +23,19 @@ from recurrent import RecurrentQAgent
 
 
 class DRQN(nn.Module):
+    """Recurrent Q-network: grid encoder + previous-action embedding -> LSTM -> Q head.
+
+    Parameters
+    ----------
+    h, w : int
+        Observation grid height and width.
+    action_size : int
+        Number of discrete actions.
+    enc_dim, lstm_hidden, action_emb_dim : int
+        Encoder output, LSTM hidden and action-embedding sizes.
+    aux_dim : int
+        Extra float features appended to the flattened grid.
+    """
     def __init__(self, h: int, w: int, action_size: int,
                  enc_dim: int = 64, lstm_hidden: int = 128,
                  action_emb_dim: int = 16, aux_dim: int = 0):
@@ -62,6 +75,10 @@ class DRQN(nn.Module):
 
 
 class DRQNAgent(RecurrentQAgent):
+    """DRQN agent: epsilon-greedy over an LSTM Q-network trained on stored episode sequences with R2D2-style burn-in.
+
+    See ``config.hyperparameters.DRQNHP`` for the defaults. `grid_shape` is the (h, w) of the observation grid.
+    """
     def __init__(self, state_size, action_size, grid_shape, learning_rate=1e-3,
                  discount_factor=0.99, exploration_rate=1.0,
                  exploration_decay=0.995, min_epsilon=0.05,
@@ -108,6 +125,7 @@ class DRQNAgent(RecurrentQAgent):
                          c.squeeze(1).cpu().numpy()]).astype(np.float32)
 
     def move(self, state):
+        """Epsilon-greedy action; advances the LSTM hidden state by one step."""
         x = self._obs_tensor(state)
         pa = torch.tensor([[self._last_action]],
                           dtype=torch.long, device=self.device)
@@ -184,6 +202,7 @@ class DRQNAgent(RecurrentQAgent):
         return {"kind": "lstm_hidden", "data": flat[:64].tolist()}
 
     def q_values(self, state):
+        """Q-values for one `state` with no history (fresh hidden state), shape (action_size,)."""
         x = self._obs_tensor(state)
         pa = torch.tensor([[NO_ACTION]], dtype=torch.long, device=self.device)
         with torch.no_grad():
@@ -191,6 +210,7 @@ class DRQNAgent(RecurrentQAgent):
         return q.squeeze(0).squeeze(0).cpu().numpy()
 
     def q_values_batch(self, states):
+        """Per-state Q-values with no history, float array of shape (N, action_size)."""
         if self.aux_dim:
             x = np.stack([np.asarray(s, dtype=np.float32).reshape(1, -1)
                           for s in states])

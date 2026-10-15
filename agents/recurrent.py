@@ -22,6 +22,10 @@ from episode_buffer import EpisodeBuffer
 
 
 class RecurrentQAgent(BaseAgent):
+    """Shared base for DRQN and DTQN: episode replay, sequence sampling with burn-in, target network and the Q-learning update.
+
+    Subclasses supply ``model``/``target_model`` and the per-step acting logic.
+    """
     def __init__(self, action_size, grid_shape, *,
                  learning_rate, discount_factor, exploration_rate,
                  exploration_decay, min_epsilon, batch_size, seq_len,
@@ -67,16 +71,19 @@ class RecurrentQAgent(BaseAgent):
 
     # -- shared lifecycle ------------------------------------------------
     def on_episode_start(self):
+        """Reset per-episode memory and open a new episode in the buffer."""
         self._on_episode_boundary()
         self.buf.start_episode()
 
     def on_episode_end(self):
         # Flush truncated episodes (and the run's final episode) into the
         # buffer, then let the base class decay epsilon.
+        """Flush the finished episode into the buffer, then decay epsilon."""
         self.buf.end_episode()
         super().on_episode_end()
 
     def update(self, state, action, reward, next_state, done, truncated=False):
+        """Record the transition; take a gradient step when enough episodes are buffered and `learn_every` divides the step count."""
         self.buf.add_step(state, action, reward, next_state, done,
                           extra=self._step_extra())
         self._step += 1
@@ -119,5 +126,6 @@ class RecurrentQAgent(BaseAgent):
             self.target_model.load_state_dict(self.model.state_dict())
 
     def policy_snapshot(self):
+        """CPU copy of the online network's state_dict."""
         return {k: v.detach().cpu().clone()
                 for k, v in self.model.state_dict().items()}
