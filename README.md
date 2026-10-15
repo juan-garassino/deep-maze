@@ -15,6 +15,44 @@ training **or** plays back pretrained models — all over the same SSE pipeline.
 
 *Sample artifacts from a 7×7 Q-agent run with two treasures (`--n_treasures 2 --generator dfs --num_episodes 80`).*
 
+## Agents
+
+| `--agent_type` | Class | Observation handling | Defaults |
+|---|---|---|---|
+| `q` | `QAgent` (tabular) | flattened observation as dict key | `config/hyperparameters.py::QHP` |
+| `dqn` | `DQNAgent` (Double DQN, MLP or CNN) | flattened / grid one-hot | `DQNHP` |
+| `ppo` | `PPOAgent` (clipped PPO + GAE) | flattened / grid one-hot | `PPOHP` |
+| `drqn` | `DRQNAgent` (LSTM, stored-hidden-state burn-in) | grid encoder + previous action | `DRQNHP` |
+| `dtqn` | `DTQNAgent` (causal transformer) | grid encoder + previous action | `DTQNHP` |
+
+`create_agent` in `training/train.py` is the single factory. See `CLAUDE.md`
+for the event bus, recorders and artifact layout.
+
+## Quickstart — local
+
+Needs Python 3.10 or newer.
+
+```bash
+pip install -r requirements.txt
+
+# Train a tiny Q-agent on a 6x6 multi-treasure maze
+python main.py --agent_type q --n_treasures 3 --generator dfs \
+  --maze_width 6 --maze_height 6 --num_episodes 100
+```
+
+This writes a run folder `maze_rl_runs/run_<timestamp>/` containing
+`config.json`, `results.json`, `model.pkl`, `model.best.pkl`,
+`best_eval.json`, `maze_rl.log` and `viz/` (`curves.png`, `policy.png`,
+`visitation.png`, `rollout.png`, `replay.webp`, `report.html`). Run
+`python main.py --help` for all options (other agents, lava, partial view,
+reward shaping, replay format, ...).
+
+```bash
+# Standalone web viewer (Train + Pretrained inference + Runs browser)
+python web/server.py --port 8000
+# then http://localhost:8000   (GET /api/health returns {"ok": true, ...})
+```
+
 ## Quickstart — Docker
 
 ```bash
@@ -25,34 +63,10 @@ Open `http://localhost:8080`. Backend on `:8000`, frontend on `:8080`.
 Mount `./assets/` to ship pretrained models trained externally (Colab).
 Mount `./maze_rl_runs/` to persist training output.
 
-### First-run sanity check
-
-The Dockerfiles are written but the first `docker compose up --build` is
-your integration test. Expected:
-
-1. `[+] Building` for both `backend` and `frontend` images (~2–5 min, torch
-   CPU wheel is the slow part).
-2. `deepmaze-backend` becomes `healthy` after the `/api/health` probe
-   succeeds (≤ 30 s).
-3. `deepmaze-frontend` starts and nginx serves `:8080`.
-4. Browse to `http://localhost:8080` — the maze editor loads. The "regenerate"
-   button hits `:8000/api/maze/generate` (visible in browser dev-tools
-   network tab).
-5. Click `Train` to fire a tiny Q-agent → SSE stream → live canvas + charts.
-
-## Quickstart — local
-
-```bash
-pip install -r requirements.txt
-
-# Train a tiny Q-agent on a 6x6 multi-treasure maze
-python main.py --agent_type q --n_treasures 3 --generator dfs \
-  --maze_width 6 --maze_height 6 --num_episodes 100
-
-# Standalone web viewer (Train + Pretrained inference + Runs browser)
-python web/server.py --port 8000
-# then http://localhost:8000
-```
+The compose file builds `Dockerfile` (backend, health-checked via
+`/api/health`) and `Dockerfile.frontend` (nginx serving `web/static`; the
+page calls the backend at `:8000`). The Docker path was not run as part of
+the last documentation pass; the local commands above were.
 
 ## Pretrained models
 
@@ -68,16 +82,18 @@ assets/<name>/
 The UI auto-discovers it via `/api/models` and exposes a `▶ Watch` button
 that streams a greedy episode through the canvas + memory strip.
 
-## Tests
+## Tests and lint
 
 ```bash
 python -m pytest tests/ -q
+ruff check .
 ```
 
 Local tests train only tiny tabular Q-agents on 5×5 mazes — heavy models
 (DRQN/DTQN/CNN) are exercised via inference only, with training done in
-Colab. See `CLAUDE.md` for architectural seams and `CONTRIBUTING.md` for
-the dev loop.
+Colab. `tests/test_otel_sampler.py` is skipped unless the OpenTelemetry SDK
+is installed (it is only in `Dockerfile.prod`). See `CLAUDE.md` for
+architectural seams and `CONTRIBUTING.md` for the dev loop.
 
 ## MLOps + GCP
 

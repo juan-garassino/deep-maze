@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("opentelemetry")
+pytest.importorskip("opentelemetry.sdk")
 from web.otel import _sampler_from_env  # noqa: E402
 
 
