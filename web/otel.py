@@ -44,6 +44,7 @@ def _sampler_from_env():
 
 
 def instrument(app) -> None:
+    """Attach OpenTelemetry tracing to `app` when ``OTEL_TRACES_EXPORTER`` is set; returns silently if it is unset or the OTEL packages are missing."""
     exporter_name = os.environ.get("OTEL_TRACES_EXPORTER", "").lower()
     if not exporter_name:
         return

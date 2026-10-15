@@ -25,6 +25,7 @@ TIMEOUT_S = 60
 
 @task
 def post_inference() -> bool:
+    """POST to the deployment's ``/api/inference`` and return True if the SSE stream yields a completed episode."""
     log = get_run_logger()
     if not CLOUD_RUN_URL:
         raise RuntimeError("CLOUD_RUN_URL not set")
@@ -45,6 +46,7 @@ def post_inference() -> bool:
 
 @flow(name="smoke_test_flow")
 def smoke_test_flow() -> bool:
+    """Prefect flow: run `post_inference` and raise `RuntimeError` if it fails."""
     ok = post_inference()
     if not ok:
         raise RuntimeError("inference stream did not yield a completed episode")

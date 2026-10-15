@@ -102,6 +102,12 @@ def _event_to_json(ev) -> str:
 
 
 def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
+    """Build the FastAPI app.
+
+    `bus` is the EventBus streamed over ``/api/events`` (a new one is created if None);
+    `manager` is an optional MazeManager for the embedded-training case (``--live_web``).
+    CORS origins come from the ``CORS_ORIGINS`` environment variable (default ``*``).
+    """
     app = FastAPI(title="deepMaze viewer")
     app.state.bus = bus or EventBus()
     app.state.manager = manager
@@ -126,10 +132,12 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
     @app.get("/")
     def index():
+        """Serve the viewer's main page."""
         return FileResponse(os.path.join(STATIC, "index.html"))
 
     @app.get("/api/health")
     def health():
+        """Liveness probe; ``embedded`` is true when a MazeManager is attached."""
         return {"ok": True, "embedded": manager is not None}
 
     @app.post("/api/runs")
@@ -259,6 +267,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
     @app.post("/api/runs/{run_id}/cancel")
     def cancel_run(run_id: str):
+        """Ask the training run `run_id` to stop at the next episode boundary (404 if unknown)."""
         entry = app.state.runs.get(run_id)
         if entry is None:
             raise HTTPException(404, run_id)
@@ -267,6 +276,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
     @app.delete("/api/runs/{name}")
     def delete_run(name: str):
+        """Delete the directory ``maze_rl_runs/<name>`` (names containing path separators or ``..`` are rejected)."""
         import shutil
         from pathlib import Path
         if "/" in name or "\\" in name or ".." in name:
@@ -280,6 +290,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
     @app.get("/api/events")
     async def events():
+        """Server-sent-events stream of all bus events; ends after a run-end event."""
         q = app.state.bus.subscribe_queue(maxsize=4096)
 
         async def gen():
@@ -440,6 +451,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
     @app.get("/runs")
     def runs_page():
+        """Serve the runs browser page."""
         return FileResponse(os.path.join(STATIC, "runs.html"))
 
     @app.get("/runs/{name}")
@@ -447,6 +459,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
         # Always serve the (possibly lazy-generated) report.html via the file
         # endpoint. Falls back to a server-rendered detail page only if
         # generation itself fails.
+        """Serve a run's HTML report, generating it first if it does not exist yet."""
         if "/" in name or "\\" in name or ".." in name:
             raise HTTPException(400, "invalid run name")
         run_dir = os.path.join(os.getcwd(), "maze_rl_runs", name)
@@ -478,6 +491,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
     @app.get("/memory")
     def memory_page():
+        """Serve the memory-strip viewer page."""
         return FileResponse(os.path.join(STATIC, "memory.html"))
 
     @app.get("/api/runs/list")
@@ -506,6 +520,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
     @app.get("/api/runs/{name}/file/{artifact}")
     def run_file(name: str, artifact: str):
+        """Serve ``maze_rl_runs/<name>/viz/<artifact>`` (path traversal is rejected); ``report.html`` is generated on demand."""
         from pathlib import Path
         if "/" in name or "\\" in name or ".." in name:
             raise HTTPException(400, "invalid run name")
@@ -530,6 +545,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
     @app.get("/api/artifacts")
     def artifacts():
+        """List the files in the attached manager's viz directory."""
         if app.state.manager is None:
             return JSONResponse({"available": False})
         viz = app.state.manager.viz_dir()
@@ -539,6 +555,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
     @app.get("/api/artifact/{name}")
     def artifact(name: str):
+        """Serve one file from the attached manager's viz directory."""
         if app.state.manager is None:
             raise HTTPException(404, "no manager attached")
         f = app.state.manager.viz_dir() / name
@@ -555,6 +572,7 @@ def create_app(bus: EventBus | None = None, manager=None) -> FastAPI:
 
 
 def start_in_thread(bus: EventBus, manager, port: int = 8000) -> threading.Thread:
+    """Serve `create_app(bus, manager)` with uvicorn on 127.0.0.1:`port` in a daemon thread and return the thread."""
     app = create_app(bus=bus, manager=manager)
 
     def _run():
