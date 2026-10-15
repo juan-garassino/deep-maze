@@ -11,6 +11,7 @@ import random
 
 
 def seed_everything(seed: int | None) -> int | None:
+    """Seed ``random``, numpy and torch (CPU and CUDA) with `seed`; returns it. Does nothing and returns None when `seed` is None."""
     if seed is None:
         return None
     seed = int(seed)

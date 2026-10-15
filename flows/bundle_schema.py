@@ -13,6 +13,7 @@ REQUIRED_KEYS = {
 
 
 def validate_bundle(bundle: Path) -> None:
+    """Raise `ValueError` unless `bundle` has a ``config.json`` with all required keys and a ``model.pt`` or ``model.pkl``."""
     cfg = json.loads((bundle / "config.json").read_text())
     missing = REQUIRED_KEYS - set(cfg)
     if missing:

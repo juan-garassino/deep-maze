@@ -24,6 +24,7 @@ EVAL_METRIC = os.environ.get("RETRAIN_EVAL_METRIC", "eval_success_rate")
 
 @task
 def find_champion(client: mlflow.MlflowClient) -> float:
+    """Best value of the eval metric in the experiment, or ``-inf`` if there are no runs."""
     runs = client.search_runs(
         experiment_ids=[client.get_experiment_by_name(EXPERIMENT_NAME).experiment_id],
         order_by=[f"metrics.{EVAL_METRIC} DESC"],
@@ -34,6 +35,7 @@ def find_champion(client: mlflow.MlflowClient) -> float:
 
 @task
 def wait_for_new_run(client: mlflow.MlflowClient, since_ts_ms: int) -> str:
+    """Poll until an MLflow run finishes after `since_ts_ms`; return its run id (raises `TimeoutError` after `MAX_WAIT_MIN` minutes)."""
     log = get_run_logger()
     deadline = time.time() + MAX_WAIT_MIN * 60
     exp_id = client.get_experiment_by_name(EXPERIMENT_NAME).experiment_id
@@ -54,6 +56,7 @@ def wait_for_new_run(client: mlflow.MlflowClient, since_ts_ms: int) -> str:
 
 @flow(name="retrain_flow")
 def retrain_flow(open_pr: bool = True) -> str | None:
+    """Wait for a new finished run; if its eval metric beats the current champion, promote it via `promote_flow` and return the result, else return None."""
     log = get_run_logger()
     uri = os.environ.get("MLFLOW_TRACKING_URI")
     if not uri:

@@ -1,3 +1,5 @@
+"""Tabular epsilon-greedy Q-learning agent."""
+
 from collections import defaultdict
 
 import numpy as np
@@ -5,6 +7,11 @@ from base_agent import BaseAgent
 
 
 class QAgent(BaseAgent):
+    """Tabular Q-learning keyed by the flattened observation.
+
+    The Q-table is a ``defaultdict`` mapping ``tuple(observation.flatten())`` to a
+    float array of shape (action_size,). Only suitable for small observation spaces.
+    """
     def __init__(self, action_size, learning_rate=0.1, discount_factor=0.95,
                  exploration_rate=1.0, exploration_decay=0.995, min_epsilon=0.01):
         super().__init__(action_size)
@@ -19,11 +26,13 @@ class QAgent(BaseAgent):
         return tuple(np.asarray(state).flatten().tolist())
 
     def move(self, state):
+        """Epsilon-greedy action for `state`."""
         if np.random.random() < self.epsilon:
             return np.random.randint(0, self.action_size)
         return int(np.argmax(self.Q[self._key(state)]))
 
     def update(self, state, action, reward, next_state, done, truncated=False):
+        """One-step Q-learning update; sets ``last_loss`` to the squared TD error. `truncated` is ignored (the target still bootstraps)."""
         k, nk = self._key(state), self._key(next_state)
         current_q = self.Q[k][action]
         next_q = 0.0 if done else float(np.max(self.Q[nk]))
@@ -32,7 +41,9 @@ class QAgent(BaseAgent):
         self.last_loss = float(td * td)
 
     def q_values(self, state):
+        """Copy of the Q row for `state`, shape (action_size,)."""
         return self.Q[self._key(state)].copy()
 
     def policy_snapshot(self):
+        """Copy of the whole Q-table as ``{state_key: ndarray(action_size,)}``."""
         return {k: v.copy() for k, v in self.Q.items()}

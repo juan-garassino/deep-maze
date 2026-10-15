@@ -110,7 +110,7 @@ Make is the canonical entry point for everything that crosses the network. Commo
 
 ```bash
 # Local — nano smoke-test on CPU (~2 min)
-make test          # 100 pytest, ruff
+make test          # pytest (ruff: `ruff check .`)
 make local         # 8×8 maze, 200 episodes — verify pipeline, not convergence
 
 # RunPod — push image, create pod, watch

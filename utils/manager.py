@@ -25,6 +25,15 @@ from typing import Any
 
 
 class MazeManager:
+    """Creates and owns ``<base_dir>/run_<id>/`` and writes every run artifact into it.
+
+    Parameters
+    ----------
+    base_dir : str
+        Parent directory for runs.
+    run_id : str, optional
+        Run suffix; defaults to a ``YYYYmmdd_HHMMSS`` timestamp.
+    """
     def __init__(self, base_dir: str = "maze_rl_runs", run_id: str | None = None):
         self.base_dir = Path(base_dir)
         ts = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -38,9 +47,11 @@ class MazeManager:
     # paths
     # ------------------------------------------------------------------
     def viz_dir(self) -> Path:
+        """The run's ``viz/`` directory."""
         return self.run_dir / "viz"
 
     def path(self, *parts) -> Path:
+        """Path of `parts` joined under the run directory."""
         return self.run_dir.joinpath(*parts)
 
     # ------------------------------------------------------------------
@@ -59,15 +70,18 @@ class MazeManager:
         return logger
 
     def log(self, msg: str, level: str = "info") -> None:
+        """Log `msg` to the run's ``maze_rl.log`` at `level` (a logging method name; falls back to info)."""
         getattr(self.logger, level, self.logger.info)(msg)
 
     def print_and_log(self, msg: str, level: str = "info") -> None:
+        """Log `msg` via `log` (the logger also echoes to the console)."""
         self.log(msg, level)
 
     # ------------------------------------------------------------------
     # artifacts
     # ------------------------------------------------------------------
     def save_config(self, config: dict[str, Any]) -> Path:
+        """Write `config` to ``config.json`` and return its path."""
         p = self.run_dir / "config.json"
         with open(p, "w") as f:
             json.dump({k: _jsonable(v) for k, v in config.items()}, f, indent=2)
@@ -75,6 +89,7 @@ class MazeManager:
         return p
 
     def save_results(self, results: dict[str, Any]) -> Path:
+        """Write `results` to ``results.json`` and return its path."""
         p = self.run_dir / "results.json"
         with open(p, "w") as f:
             json.dump({k: _jsonable(v) for k, v in results.items()}, f, indent=2)
@@ -82,6 +97,7 @@ class MazeManager:
         return p
 
     def save_model(self, agent, filename: str = "model") -> Path:
+        """Save the agent as ``<filename>.pkl`` (tabular Q-table) or ``<filename>.pt`` (torch state_dict); returns the path."""
         if hasattr(agent, "Q"):  # tabular
             p = self.run_dir / f"{filename}.pkl"
             with open(p, "wb") as f:
@@ -96,6 +112,7 @@ class MazeManager:
 
     # --- viz convenience -------------------------------------------------
     def save_replay(self, render_maze, fmt: str = "webp", **kw) -> Path:
+        """Save a RenderMaze as ``viz/replay.<fmt>``; extra keyword arguments go to ``RenderMaze.save``."""
         out = self.viz_dir() / f"replay.{fmt}"
         render_maze.save(str(out), fmt=fmt, **kw)
         self.log(f"Replay saved to {out}")
@@ -109,6 +126,7 @@ class MazeManager:
         return dst
 
     def save_curves(self, episodes: list[Any]) -> Path:
+        """Plot training curves from EpisodeEvents to ``viz/curves.png``."""
         from visualizations import plot_training_curves  # lazy
         out = self.viz_dir() / "curves.png"
         plot_training_curves(episodes, str(out))
@@ -116,6 +134,7 @@ class MazeManager:
         return out
 
     def save_rollout(self, agent, env, max_rollout: int = 30) -> Path:
+        """Save the behavioural rollout plot to ``viz/rollout.png``."""
         from visualizations import plot_behavioral_rollout
         out = self.viz_dir() / "rollout.png"
         plot_behavioral_rollout(agent, env, str(out), max_rollout=max_rollout)
@@ -146,6 +165,7 @@ class MazeManager:
         return True
 
     def save_policy_heatmap(self, q_source, env) -> Path:
+        """Save the policy / V(s) heatmap to ``viz/policy.png``; see `plot_policy_heatmap` for `q_source`."""
         from visualizations import plot_policy_heatmap
         out = self.viz_dir() / "policy.png"
         plot_policy_heatmap(q_source, env, str(out))
@@ -153,12 +173,14 @@ class MazeManager:
         return out
 
     def save_html_report(self) -> Path:
+        """Write the self-contained HTML report for this run and return its path."""
         from report import write_html_report
         out = write_html_report(self.run_dir)
         self.log(f"HTML report saved to {out}")
         return out
 
     def save_visitation(self, trajectories: list[list], env) -> Path:
+        """Save the visitation heatmap of `trajectories` (lists of (row, col)) to ``viz/visitation.png``."""
         from visualizations import plot_visitation
         out = self.viz_dir() / "visitation.png"
         plot_visitation(trajectories, env, str(out))

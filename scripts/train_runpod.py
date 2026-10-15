@@ -164,6 +164,10 @@ def train_stage(agent_type: str, run_name: str,
                 num_episodes: int, max_steps: int,
                 seq_len: int = 0,
                 warm_start_path: str | None = None) -> dict:
+    """Train one curriculum stage of `agent_type` on a `width` x `height` maze with `n_treasures`, via `train_session`.
+
+    `seq_len` (DRQN/DTQN only) sets the sequence length and `burn_in = max(2, seq_len // 2)`. `warm_start_path` loads weights from an earlier stage. Returns the session result dict.
+    """
     overrides = _agent_overrides(agent_type)
     if seq_len and agent_type in ("drqn", "dtqn"):
         overrides["seq_len"] = seq_len
@@ -194,6 +198,7 @@ def train_stage(agent_type: str, run_name: str,
 
 
 def main():
+    """Run the configured agents through the curriculum, logging to a file-based MLflow store and writing bundles under the assets directory (configuration comes from environment variables)."""
     OUTPUT_BASE.mkdir(parents=True, exist_ok=True)
     MLRUNS_DIR.mkdir(parents=True, exist_ok=True)
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)

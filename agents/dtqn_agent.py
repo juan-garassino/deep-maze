@@ -43,6 +43,12 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor,
                 key_padding_mask: torch.Tensor | None = None) -> torch.Tensor:
+        """Pre-norm attention + feed-forward block.
+
+        x: (B, T, dim) float; mask: (T, T) bool, True = disallowed; key_padding_mask:
+        optional (B, T) bool. Returns (B, T, dim). Head-averaged attention weights are
+        kept in ``last_attn`` with shape (B, T, T).
+        """
         h = self.ln1(x)
         out, w = self.attn(h, h, h, attn_mask=mask,
                            key_padding_mask=key_padding_mask,
@@ -54,6 +60,21 @@ class TransformerBlock(nn.Module):
 
 
 class DTQN(nn.Module):
+    """Transformer Q-network over a causal window of past observations and actions.
+
+    Parameters
+    ----------
+    h, w : int
+        Observation grid height and width.
+    action_size : int
+        Number of discrete actions.
+    dim, heads, layers : int
+        Model width, attention heads and transformer blocks.
+    max_ctx : int
+        Maximum context length (size of the learned position embedding).
+    aux_dim : int
+        Extra float features appended to the flattened grid.
+    """
     def __init__(self, h: int, w: int, action_size: int,
                  dim: int = 128, heads: int = 4, layers: int = 2,
                  max_ctx: int = 64, ff_mult: int = 2, aux_dim: int = 0):
@@ -78,6 +99,7 @@ class DTQN(nn.Module):
     def causal_mask(T: int, device) -> torch.Tensor:
         # bool mask (True = disallowed) so it composes with the bool
         # key_padding_mask without dtype-mismatch warnings
+        """Boolean (T, T) mask, True above the diagonal (future positions are disallowed)."""
         m = torch.ones((T, T), dtype=torch.bool, device=device)
         return torch.triu(m, diagonal=1)
 
@@ -117,6 +139,10 @@ class DTQN(nn.Module):
 
 
 class DTQNAgent(RecurrentQAgent):
+    """DTQN agent: epsilon-greedy over a causal-transformer Q-network.
+
+    See ``config.hyperparameters.DTQNHP`` for the defaults. `grid_shape` is the (h, w) of the observation grid.
+    """
     def __init__(self, state_size, action_size, grid_shape,
                  learning_rate=3e-4, discount_factor=0.99,
                  exploration_rate=1.0, exploration_decay=0.995,
@@ -164,6 +190,7 @@ class DTQNAgent(RecurrentQAgent):
                 torch.from_numpy(pa).to(self.device))
 
     def move(self, state):
+        """Epsilon-greedy action from the Q-values at the last position of the current context."""
         self._ctx_obs.append(np.asarray(state))
         self._ctx_pa.append(self._last_action)
         obs_t, pa_t = self._ctx_tensors()
@@ -221,6 +248,7 @@ class DTQNAgent(RecurrentQAgent):
         return {"kind": "attention_row", "data": last_row.tolist()}
 
     def q_values(self, state):
+        """Q-values for one `state` with a single-step context, shape (action_size,)."""
         x = self._obs_tensor(state)
         pa = torch.tensor([[NO_ACTION]], dtype=torch.long, device=self.device)
         with torch.no_grad():
@@ -228,6 +256,7 @@ class DTQNAgent(RecurrentQAgent):
         return q.squeeze(0).squeeze(0).cpu().numpy()
 
     def q_values_batch(self, states):
+        """Per-state Q-values with single-step context, float array of shape (N, action_size)."""
         if self.aux_dim:
             x = np.stack([np.asarray(s, dtype=np.float32).reshape(1, -1)
                           for s in states])

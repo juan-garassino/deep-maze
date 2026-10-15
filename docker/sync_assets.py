@@ -17,6 +17,7 @@ from pathlib import Path
 
 
 def main() -> int:
+    """Copy blobs under ``gs://$ASSETS_BUCKET/$ASSETS_PREFIX`` into ``$ASSETS_DIR`` (default ``/app/assets``). Returns 0, including when the bucket variable or google-cloud-storage is absent (sync skipped)."""
     bucket_name = os.environ.get("ASSETS_BUCKET")
     if not bucket_name:
         return 0

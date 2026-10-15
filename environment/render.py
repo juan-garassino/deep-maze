@@ -47,6 +47,7 @@ class RenderMaze:
         self.frames: list[tuple[np.ndarray, object, np.ndarray | None]] = []
 
     def add(self, maze: np.ndarray, position, q_values: np.ndarray | None = None):
+        """Append one frame: `maze` is an (h, w) cell-label array, `position` the agent's (row, col), and `q_values` an optional float array of shape (4,) used for the Q overlay. Arrays are copied."""
         self.frames.append((np.asarray(maze).copy(), position,
                             None if q_values is None else np.asarray(q_values).copy()))
 
@@ -97,6 +98,10 @@ class RenderMaze:
     def render_frames(self, sprite_size: int = 32,
                       frame_skip: int = 1, max_frames: int | None = None
                       ) -> list[Image.Image]:
+        """Render the stored frames to PIL images (each `sprite_size` * (width, height) pixels).
+
+        `frame_skip` keeps every n-th frame and `max_frames` caps the count; the last frame is always kept.
+        """
         if not self.frames:
             return []
         keep_idx = self._frame_indices(frame_skip, max_frames)
@@ -191,6 +196,7 @@ class RenderMaze:
 
     # Back-compat shim with old API (timestamped filename in cwd).
     def show(self, sprite_size: int = 32, gif_duration: int = 60) -> str:
+        """Save the frames as a timestamped GIF in the working directory and return its path."""
         import datetime
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         path = f"moving_maze_{ts}.gif"
@@ -201,6 +207,7 @@ class RenderMaze:
     def crop_images(input_path: str, image_names: list[str],
                     tile_h: int = 16, tile_w: int = 16, sprite_size: int = 32,
                     return_indexes: list[int] | None = None) -> list[Image.Image]:
+        """Cut each sheet in `image_names` (under `input_path`) into `tile_h` x `tile_w` tiles, resize them to `sprite_size` square and return them in order, or only those at `return_indexes`."""
         out: list[Image.Image] = []
         for name in image_names:
             with Image.open(os.path.join(input_path, name)) as im:

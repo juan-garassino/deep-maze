@@ -1,7 +1,19 @@
+"""Abstract base class shared by every agent."""
+
 from abc import ABC, abstractmethod
 
 
 class BaseAgent(ABC):
+    """Common interface for all agents.
+
+    Subclasses implement `move` and `update`; `q_values`, `policy_snapshot` and
+    `memory_snapshot` are optional hooks used by the visualisation code.
+
+    Parameters
+    ----------
+    action_size : int
+        Number of discrete actions.
+    """
     def __init__(self, action_size):
         self.action_size = action_size
         self.last_loss = None
@@ -38,6 +50,7 @@ class BaseAgent(ABC):
 
     @abstractmethod
     def move(self, state):
+        """Return the discrete action (int in ``[0, action_size)``) for `state`."""
         ...
 
     @abstractmethod
@@ -48,9 +61,11 @@ class BaseAgent(ABC):
         ...
 
     def q_values(self, state):
+        """Per-action values for `state` as a float array of shape (action_size,), or None if the agent has none."""
         return None
 
     def policy_snapshot(self):
+        """Copy of the agent's parameters (or Q-table) for the event bus, or None."""
         return None
 
     def memory_snapshot(self):

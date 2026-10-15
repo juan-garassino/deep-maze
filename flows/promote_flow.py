@@ -24,6 +24,7 @@ from flows.bundle_schema import validate_bundle as _validate_bundle
 
 @task
 def download_bundle(run_id: str) -> Path:
+    """Download the ``assets/<run_name>`` artifact of MLflow run `run_id` to a temp dir and return its path."""
     log = get_run_logger()
     client = mlflow.MlflowClient()
     run = client.get_run(run_id)
@@ -41,11 +42,13 @@ def download_bundle(run_id: str) -> Path:
 
 @task
 def validate_bundle(bundle: Path) -> None:
+    """Prefect task wrapper around `bundle_schema.validate_bundle`."""
     _validate_bundle(bundle)
 
 
 @task
 def push_to_gcs(bundle: Path, bucket: str) -> str:
+    """Rsync `bundle` to ``gs://<bucket>/<bundle name>/`` with gsutil and return that URI."""
     log = get_run_logger()
     name = bundle.name
     subprocess.check_call(["gsutil", "-m", "rsync", "-r",
@@ -56,6 +59,7 @@ def push_to_gcs(bundle: Path, bucket: str) -> str:
 
 @task
 def commit_and_pr(bundle: Path, repo_dir: Path) -> str:
+    """Copy `bundle` into ``<repo_dir>/assets/``, commit it on a ``promote/<name>`` branch, push, open a PR with the gh CLI and return its URL."""
     log = get_run_logger()
     name = bundle.name
     target = repo_dir / "assets" / name
@@ -78,6 +82,7 @@ def commit_and_pr(bundle: Path, repo_dir: Path) -> str:
 
 @flow(name="promote_flow")
 def promote_flow(run_id: str, open_pr: bool = True) -> str:
+    """Promote MLflow run `run_id`: download and validate its bundle, then open a PR (default) or push to ``$ASSETS_BUCKET``. Returns the PR URL or GCS URI."""
     mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
     bundle = download_bundle(run_id)
     validate_bundle(bundle)

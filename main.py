@@ -30,6 +30,7 @@ from viz_events import EventBus  # noqa: E402
 
 
 def build_argparser() -> argparse.ArgumentParser:
+    """Build the command-line parser for `main.py` (agent, maze, training and output options)."""
     p = argparse.ArgumentParser(description="deepMaze — RL maze playground")
     p.add_argument("--agent_type",
                    choices=["q", "dqn", "ppo", "drqn", "dtqn"], default="q")
@@ -119,6 +120,7 @@ def _load_sprites(args) -> list:
 
 
 def run(args):
+    """Train an agent from parsed `args` and write all run artifacts through a MazeManager."""
     seed_everything(args.seed)
     mgr = MazeManager(run_id=args.run_name or args.run_id)
     mgr.save_config(vars(args))

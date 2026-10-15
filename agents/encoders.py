@@ -17,6 +17,11 @@ from nets import VOCAB, grid_onehot
 
 
 class GridAttnEncoder(nn.Module):
+    """Encode an (h, w) integer maze view into a (B, dim) vector.
+
+    One-hot -> conv stem -> multi-head attention with a learned CLS query -> LayerNorm.
+    An optional float feature vector (`aux_dim`) is projected and added after pooling.
+    """
     def __init__(self, h: int, w: int, dim: int = 64, heads: int = 4,
                  conv_layers: int = 2, aux_dim: int = 0):
         super().__init__()
