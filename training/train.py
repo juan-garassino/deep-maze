@@ -22,6 +22,12 @@ from viz_events import (
 
 
 def create_agent(agent_type: str, env: MazeEnvironment, **kwargs):
+    """Build an agent of `agent_type` (``'q'|'dqn'|'ppo'|'drqn'|'dtqn'``) sized for `env`.
+
+    Defaults come from ``config.hyperparameters``; non-None `kwargs` override them and
+    keys the agent does not accept are dropped with a printed notice. Raises
+    `ValueError` for an unknown type, or for tabular ``'q'`` with aux features.
+    """
     from hyperparameters import defaults_for
     state_size = int(np.prod(env.get_observation().shape))  # incl. aux
     action_size = env.action_size
@@ -79,6 +85,27 @@ def train_agent(env: MazeEnvironment, agent, num_episodes: int, max_steps: int,
                 eval_every: int | None = None,
                 eval_episodes: int = 10,
                 on_eval=None):
+    """Train `agent` on `env` for up to `num_episodes` episodes of at most `max_steps` steps.
+
+    Progress is published on `bus` (Step/Episode/Policy/Eval/Run events) when given.
+
+    Parameters
+    ----------
+    random_start : bool
+        Start each episode on a random empty cell instead of the start cell.
+    should_stop : callable, optional
+        Polled once per episode; a true return ends training early.
+    regenerate_every : int, optional
+        Rebuild the maze every N episodes.
+    eval_every, eval_episodes : int
+        Run a greedy evaluation of `eval_episodes` episodes every `eval_every` episodes.
+    on_eval : callable, optional
+        Called with ``(episode, metrics_dict)`` after each periodic evaluation.
+
+    Returns
+    -------
+    The trained agent.
+    """
     if bus is not None:
         bus.publish(RunEvent(kind="start",
                              info={"num_episodes": num_episodes,
@@ -210,6 +237,7 @@ def simulate_episode_streaming(env: MazeEnvironment, agent, bus: EventBus,
 
 @dataclass
 class EpisodeResult:
+    """Outcome of one rolled-out episode: observations, positions, actions, return, length and flags."""
     states: list[np.ndarray]
     positions: list[tuple[int, int]]
     actions: list[int]
@@ -230,6 +258,7 @@ class EpisodeResult:
 
 def run_episode(env: MazeEnvironment, agent, max_steps: int,
                 at_start: bool = True) -> EpisodeResult:
+    """Roll out one episode with the agent's current policy and return an `EpisodeResult`."""
     state = env.reset(at_start=at_start)
     if hasattr(agent, "on_episode_start"):
         agent.on_episode_start()
@@ -258,6 +287,7 @@ def run_episode(env: MazeEnvironment, agent, max_steps: int,
 def simulate_episode(env: MazeEnvironment, agent, max_steps: int,
                      at_start: bool = True
                      ) -> tuple[list[np.ndarray], list[tuple[int, int]], list[int], float]:
+    """Run `run_episode` and return ``(states, positions, actions, total_reward)``."""
     r = run_episode(env, agent, max_steps, at_start=at_start)
     return r.states, r.positions, r.actions, r.total_reward
 

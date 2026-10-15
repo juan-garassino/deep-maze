@@ -35,6 +35,41 @@ AUX_DIM = 6
 
 
 class MazeEnvironment:
+    """Grid maze with one or more agents, treasures (EXIT cells) and optional lava.
+
+    Observations are integer cell-label grids of shape (height, width), or an
+    egocentric window when `partial_view` is set. With `aux_features` the result
+    is a flat float32 vector: the flattened grid followed by `AUX_DIM` features.
+    Actions are 0=up, 1=right, 2=down, 3=left; walls (HOLE) and the border block
+    movement.
+
+    Parameters
+    ----------
+    width, height : int
+        Grid size, both at least 5.
+    n_agents : int
+        Number of agents; `step` then takes one action per agent.
+    density : float
+        Wall density for the ``random`` generator.
+    seed : int, optional
+        Seed for the environment's RNG.
+    generator : str
+        Maze generator name, or a comma list sampled once per build.
+    ensure_solvable : bool
+        Regenerate until every treasure is reachable from the start.
+    n_lava, lava_reward : int, float
+        Number of lava cells and the reward for stepping on one.
+    partial_view : int, optional
+        Window radius K; the observation is a (2K+1, 2K+1) crop centred on agent 0.
+    n_treasures, collect_all : int, bool
+        Treasure count; if `collect_all`, the episode ends only once all are consumed.
+    bump_penalty : float
+        Reward when an action is blocked.
+    aux_features : bool
+        Append position / treasure-direction features to the observation.
+    reward_shaping, shaping_gamma, shaping_coef : bool, float, float
+        Potential-based shaping toward the nearest remaining treasure.
+    """
     metadata = {"render.modes": ["human"]}
 
     def __init__(self, width: int = 10, height: int = 10, n_agents: int = 1,
@@ -104,6 +139,7 @@ class MazeEnvironment:
     # back-compat alias
     @property
     def treasure_pos(self) -> tuple[int, int]:
+        """Position (row, col) of the first treasure."""
         return self.treasure_positions[0]
 
     # ------------------------------------------------------------------
@@ -240,6 +276,7 @@ class MazeEnvironment:
             cur = prev[cur]
 
     def is_solvable(self) -> bool:
+        """True if every treasure is reachable from the start cell."""
         return all(self._connected(self.start_pos, t)
                    for t in self.treasure_positions)
 
@@ -315,6 +352,11 @@ class MazeEnvironment:
 
     def reset(self, at_start: bool = False) -> np.ndarray:
         # Restore any treasures consumed during the previous episode.
+        """Restore consumed treasures, place the agents and return the first observation.
+
+        If `at_start`, agent 0 begins on the start cell; otherwise every agent is placed
+        on a random empty cell.
+        """
         for p in self.treasure_positions:
             self.maze[p] = EXIT
         self._remaining = set(self.treasure_positions) if self.collect_all else set()
@@ -335,6 +377,7 @@ class MazeEnvironment:
     # ------------------------------------------------------------------
     @property
     def aux_dim(self) -> int:
+        """Number of auxiliary features appended to the observation (0 when disabled)."""
         return AUX_DIM if self.aux_features else 0
 
     @property
@@ -447,6 +490,12 @@ class MazeEnvironment:
                                self._aux_vector()])
 
     def step(self, actions: int | Sequence[int]):
+        """Apply one action per agent.
+
+        `actions` is an int (single agent) or a sequence of ints. Returns
+        ``(observation, reward, done, info)``; for a single agent `reward` and `done`
+        are scalars, otherwise lists.
+        """
         if self.n_agents == 1 and isinstance(actions, (int, np.integer)):
             actions = [int(actions)]
         actions = list(actions)
@@ -497,9 +546,11 @@ class MazeEnvironment:
         return self.get_observation(), rewards, dones, info
 
     def get_possible_actions(self) -> list[int]:
+        """List of valid action ids, ``[0, 1, 2, 3]``."""
         return [0, 1, 2, 3]
 
     def render(self, mode: str = "human"):
+        """Print an ASCII view of the maze to stdout (mode ``"human"``); any other mode returns the observation."""
         if mode != "human":
             return self.get_observation()
         glyph = {HOLE: "█", LAND: "·", START: "S", EXIT: "T"}

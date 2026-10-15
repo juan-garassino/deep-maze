@@ -55,6 +55,7 @@ class ReplayRecorder:
         self.render_maze = render_maze
 
     def feed(self, states, positions, q_values_seq=None):
+        """Add one frame per (state, position) pair to the RenderMaze; `q_values_seq`, if given, supplies the per-frame Q overlay."""
         for i, (s, p) in enumerate(zip(states, positions)):
             q = None if q_values_seq is None else q_values_seq[i]
             self.render_maze.add(s, p, q_values=q)
